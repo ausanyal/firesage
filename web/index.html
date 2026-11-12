@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>FireSage — Institutional Stochastic FIRE &amp; Lifecycle Simulator (India &amp; USA)</title>
+    <script>
+      {
+        const savedScheme = localStorage.getItem('color-scheme');
+        if (savedScheme === 'light' || savedScheme === 'dark') {
+          const meta = document.querySelector('meta[name="color-scheme"]');
+          if (meta) meta.setAttribute('content', savedScheme);
+          document.documentElement.dataset.theme = savedScheme;
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

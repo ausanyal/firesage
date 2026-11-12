@@ -1,0 +1,13 @@
+.git
+.tools
+.DS_Store
+node_modules
+web/node_modules
+web/dist
+web/public/firesage.wasm
+web/public/wasm_exec.js
+internal/server/dist/*
+!internal/server/dist/index.html
+/firesage
+*.md
+docs/

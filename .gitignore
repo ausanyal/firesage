@@ -11,11 +11,15 @@
 node_modules/
 web/node_modules/
 web/dist/
-internal/server/dist/
-dist/
-build/
-bin/
-firesage
+*.tsbuildinfo
+web/public/firesage.wasm
+web/public/wasm_exec.js
+internal/server/dist/*
+!internal/server/dist/index.html
+/dist/
+/build/
+/bin/
+/firesage
 
 # Environment & Secrets
 .env
