@@ -4,6 +4,8 @@
 node_modules
 web/node_modules
 web/dist
+web/package-lock.json
+*.tsbuildinfo
 web/public/firesage.wasm
 web/public/wasm_exec.js
 internal/server/dist/*
