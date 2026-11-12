@@ -1,0 +1,25 @@
+# OS & Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local Portable Toolchains (sandbox-friendly Go / Node)
+.tools/
+
+# Dependencies & Build Artifacts
+node_modules/
+web/node_modules/
+web/dist/
+internal/server/dist/
+dist/
+build/
+bin/
+firesage
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*credentials*.json
