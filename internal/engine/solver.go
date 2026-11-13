@@ -234,9 +234,15 @@ func solveRequiredCorpusAtRetireCRN(in PlanInput, targetPct float64, scenarios [
 		}
 	}
 
-	annualSpend := in.DesiredMonthlySpend * 12.0
-	lo := annualSpend * 8.0
-	hi := annualSpend * 52.0
+	currCity := data.GetCity(in.CurrentCityID, in.Country)
+	retCity := data.GetCity(in.RetirementCityID, in.Country)
+	effScale := 1.0
+	if in.AutoScaleLifestyleOnMove && retCity.ID != currCity.ID {
+		effScale = EffectiveCOLScale(currCity, retCity)
+	}
+	annualSpend := in.DesiredMonthlySpend * 12.0 * effScale
+	lo := annualSpend * 4.0
+	hi := annualSpend * 62.0
 	for iter := 0; iter < 11; iter++ {
 		mid := 0.5 * (lo + hi)
 		probe := probeBase
@@ -330,7 +336,7 @@ func interpolateThresholdAge(pts []FrontierPoint, threshold float64, fallback fl
 }
 
 func solveCoastFIREAgeCRN(in PlanInput, scenarios [][]data.MarketYear) float64 {
-	traditionalRetire := maxInt(60, in.CurrentAge+1)
+	traditionalRetire := maxInt(StatutoryUnlockAge(in.Country), in.CurrentAge+1)
 	if traditionalRetire >= in.HorizonAge-3 {
 		return float64(in.CurrentAge)
 	}
@@ -387,25 +393,43 @@ func solveLeanFIREAgeCRN(in PlanInput, scenarios [][]data.MarketYear) float64 {
 	return solveTargetAgeQuickCRN(probe, 90.0, scenarios)
 }
 
+func defaultTier2ComparisonCity(currCity data.CityProfile, country data.CountryCode) data.CityProfile {
+	switch country {
+	case data.CountryUSA:
+		if currCity.ID == "us-raleigh" {
+			return data.GetCity("us-austin", data.CountryUSA)
+		}
+		return data.GetCity("us-raleigh", data.CountryUSA)
+	case data.CountryAustralia:
+		if currCity.ID == "au-gold-coast" {
+			return data.GetCity("au-adelaide", data.CountryAustralia)
+		}
+		return data.GetCity("au-gold-coast", data.CountryAustralia)
+	case data.CountryEurope:
+		if currCity.ID == "eu-algarve" {
+			return data.GetCity("eu-south-italy", data.CountryEurope)
+		}
+		return data.GetCity("eu-algarve", data.CountryEurope)
+	case data.CountryNewZealand:
+		if currCity.ID == "nz-tauranga-nelson" {
+			return data.GetCity("nz-wellington", data.CountryNewZealand)
+		}
+		return data.GetCity("nz-tauranga-nelson", data.CountryNewZealand)
+	default:
+		if currCity.ID == "in-goa" {
+			return data.GetCity("in-dehradun", data.CountryIndia)
+		}
+		return data.GetCity("in-goa", data.CountryIndia)
+	}
+}
+
 func computeGeoArbitrageSummaryCRN(in PlanInput, currentPlanRate float64, scenarios [][]data.MarketYear) GeoArbitrageSummary {
 	currCity := data.GetCity(in.CurrentCityID, in.Country)
 	compCity := data.GetCity(in.RetirementCityID, in.Country)
 	isRelocating := compCity.ID != currCity.ID
 
 	if !isRelocating {
-		if in.Country == data.CountryUSA {
-			if currCity.ID == "us-raleigh" {
-				compCity = data.GetCity("us-austin", data.CountryUSA)
-			} else {
-				compCity = data.GetCity("us-raleigh", data.CountryUSA)
-			}
-		} else {
-			if currCity.ID == "in-goa" {
-				compCity = data.GetCity("in-mysuru", data.CountryIndia)
-			} else {
-				compCity = data.GetCity("in-goa", data.CountryIndia)
-			}
-		}
+		compCity = defaultTier2ComparisonCity(currCity, in.Country)
 	}
 
 	stayProbe := in
@@ -487,12 +511,9 @@ func computeActionLeversCRN(in PlanInput, baseRate float64, baseTargetAge float6
 	}
 
 	currCity := data.GetCity(in.CurrentCityID, in.Country)
-	altCityID := "in-goa"
-	altCityName := "Goa"
-	if in.Country == data.CountryUSA {
-		altCityID = "us-raleigh"
-		altCityName = "Raleigh, NC"
-	}
+	altCity := defaultTier2ComparisonCity(currCity, in.Country)
+	altCityID := altCity.ID
+	altCityName := altCity.Name
 
 	specs := []leverSpec{
 		{

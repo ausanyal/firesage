@@ -216,6 +216,12 @@ body {
   gap: 3px;
 }
 
+.fs-seg-fieldset {
+  margin: 0;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
 .fs-full-seg {
   display: flex;
   width: 100%;

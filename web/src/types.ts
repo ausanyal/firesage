@@ -1,4 +1,10 @@
-export type CountryCode = 'IN' | 'US';
+export type CountryCode = 'IN' | 'US' | 'AU' | 'EU' | 'NZ';
+export const SUPPORTED_COUNTRIES: CountryCode[] = ['IN', 'US', 'AU', 'EU', 'NZ'];
+
+export function isValidCountry(val: unknown): val is CountryCode {
+  return typeof val === 'string' && (SUPPORTED_COUNTRIES as string[]).includes(val);
+}
+
 export type SimulationMode = 'bootstrap' | 'historical' | 'regime_mc' | 'stress_test';
 export type WithdrawalStrategy = 'constant_real' | 'guyton_klinger' | 'cape_dynamic';
 
@@ -249,6 +255,7 @@ export interface MetadataResponse {
   valuations: Record<CountryCode, ValuationInfo>;
   defaults: Record<CountryCode, PlanInput>;
   fx_usd_to_inr?: number;
+  fx_rates_per_usd?: Record<CountryCode, number>;
 }
 
 export interface SavedPlanRecord {

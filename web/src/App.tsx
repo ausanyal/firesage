@@ -7,15 +7,17 @@ import { ReadinessFrontierChart } from './components/ReadinessFrontierChart';
 import { WealthConeChart } from './components/WealthConeChart';
 import { type ExecutionBackend, fetchMetadata, runSimulationAnalysis } from './engine/client';
 import { encodeShareableURL, planRepository } from './storage/planRepository';
-import type {
-  CountryCode,
-  FullAnalysisResponse,
-  MetadataResponse,
-  PlanInput,
-  SampleTrajectory,
-  SavedPlanRecord,
+import {
+  type CountryCode,
+  type FullAnalysisResponse,
+  isValidCountry,
+  type MetadataResponse,
+  type PlanInput,
+  type SampleTrajectory,
+  type SavedPlanRecord,
+  SUPPORTED_COUNTRIES,
 } from './types';
-import { formatMoneyCompact, formatMoneyFull } from './utils/format';
+import { COUNTRY_META, formatMoneyCompact, formatMoneyFull } from './utils/format';
 
 export const App: React.FC = () => {
   const [metadata, setMetadata] = useState<MetadataResponse | null>(null);
@@ -174,7 +176,7 @@ export const App: React.FC = () => {
         case 'geo-arbitrage-tier2':
           setInput({
             ...input,
-            retirement_city_id: input.country === 'US' ? 'us-raleigh' : 'in-goa',
+            retirement_city_id: COUNTRY_META[input.country]?.defaultTier2CityId ?? 'in-goa',
             auto_scale_lifestyle_on_move: true,
           });
           break;
@@ -220,7 +222,7 @@ export const App: React.FC = () => {
       try {
         const parsed = JSON.parse(String(reader.result));
         const loaded: PlanInput = parsed.input || parsed;
-        if (loaded && (loaded.country === 'IN' || loaded.country === 'US')) {
+        if (loaded && isValidCountry(loaded.country)) {
           setInput(loaded);
           setPlansOpen(false);
         }
@@ -253,6 +255,7 @@ export const App: React.FC = () => {
   }
 
   const country = input.country;
+  const unlockAge = COUNTRY_META[country].unlockAge;
   const valInfo = metadata.valuations[country];
   const successTone =
     analysis.success_rate >= 90
@@ -272,36 +275,30 @@ export const App: React.FC = () => {
           <div>
             <h1 className="fs-brand-title">FireSage</h1>
             <div className="fs-brand-tag">
-              Institutional Stochastic FIRE &amp; Geo-Arbitrage Simulator •{' '}
+              Global 5-Jurisdiction Stochastic FIRE &amp; Geo-Arbitrage Simulator •{' '}
               {isComputing ? 'Simulating…' : `${analysis.compute_duration_ms.toFixed(0)}ms`}
             </div>
           </div>
         </div>
 
         <div className="fs-topbar-actions">
-          {/* Country Toggle (2 options -> Radio per modern-web-guidance) */}
-          <div className="fs-segmented" role="radiogroup" aria-label="Work portfolio currency and account jurisdiction">
-            <label className={`fs-seg-option ${country === 'IN' ? 'active' : ''}`}>
-              <input
-                type="radio"
-                name="country_switch"
-                checked={country === 'IN'}
-                onChange={() => switchCountry('IN')}
-                className="visually-hidden"
-              />
-              🇮🇳 Work IN (₹ Cr/L)
-            </label>
-            <label className={`fs-seg-option ${country === 'US' ? 'active' : ''}`}>
-              <input
-                type="radio"
-                name="country_switch"
-                checked={country === 'US'}
-                onChange={() => switchCountry('US')}
-                className="visually-hidden"
-              />
-              🇺🇸 Work US ($M/K)
-            </label>
-          </div>
+          {/* 5 Exclusive Jurisdictions -> Fieldset + Legend + Visible Radio Pills per modern-web-guidance `forms` */}
+          <fieldset className="fs-segmented fs-seg-fieldset">
+            <legend className="visually-hidden">Work portfolio currency and account jurisdiction</legend>
+            {SUPPORTED_COUNTRIES.map((code) => (
+              <label key={code} className={`fs-seg-option ${country === code ? 'active' : ''}`}>
+                <input
+                  type="radio"
+                  name="country_switch"
+                  value={code}
+                  checked={country === code}
+                  onChange={() => switchCountry(code)}
+                  className="visually-hidden"
+                />
+                {COUNTRY_META[code].shortBtn}
+              </label>
+            ))}
+          </fieldset>
 
           <button type="button" className="fs-btn" onClick={() => setPlansOpen(true)}>
             💾 Plans ({savedPlans.length})
@@ -328,7 +325,12 @@ export const App: React.FC = () => {
 
       {/* MAIN TWO-COLUMN WORKSPACE */}
       <main className="fs-workspace">
-        <InputControlRail input={input} cities={metadata.cities} onChange={setInput} />
+        <InputControlRail
+          input={input}
+          cities={metadata.cities}
+          fxRates={metadata.fx_rates_per_usd}
+          onChange={setInput}
+        />
 
         <div className="fs-main-canvas">
           {/* EXECUTIVE TELEMETRY KPI STRIP */}
@@ -337,11 +339,11 @@ export const App: React.FC = () => {
               <div className="fs-kpi-label">Plan Survival (Age {input.horizon_age})</div>
               <div className={`fs-kpi-val ${successTone}`}>{analysis.success_rate.toFixed(1)}%</div>
               <div className="fs-kpi-sub">
-                Pre-60 Liquidity Safe: <strong>{analysis.liquidity_safe_rate.toFixed(1)}%</strong>
+                Pre-{unlockAge} Liquidity Safe: <strong>{analysis.liquidity_safe_rate.toFixed(1)}%</strong>
               </div>
               <p className="fs-kpi-help">
                 % of 3,000 market simulations lasting to Age {input.horizon_age}; Liquidity Safe avoids dipping into
-                Age-60 funds early.
+                Age-{unlockAge} locked funds early.
               </p>
             </div>
 
@@ -353,7 +355,8 @@ export const App: React.FC = () => {
                 <strong>{analysis.fortress_fire_age.toFixed(1)}</strong>
               </div>
               <p className="fs-kpi-help">
-                Earliest age to retire with 90%+ odds. Coast = stop saving now &amp; retire at 60; Fortress = 97%+ safe.
+                Earliest age to retire with 90%+ odds. Coast = stop saving now &amp; retire at {unlockAge}; Fortress =
+                97%+ safe.
               </p>
             </div>
 
@@ -574,8 +577,8 @@ export const App: React.FC = () => {
                     <div>
                       <strong>{sp.name}</strong>
                       <div className="fs-hint">
-                        {sp.input.country === 'IN' ? '🇮🇳 India' : '🇺🇸 USA'} • Retire Age {sp.input.retirement_age} •
-                        Corpus {formatMoneyCompact(sp.input.current_corpus, sp.input.country)}
+                        {COUNTRY_META[sp.input.country]?.flag} {COUNTRY_META[sp.input.country]?.name} • Retire Age{' '}
+                        {sp.input.retirement_age} • Corpus {formatMoneyCompact(sp.input.current_corpus, sp.input.country)}
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '0.4rem' }}>
@@ -612,42 +615,70 @@ export const App: React.FC = () => {
       <LightDismissDialog
         open={sourcesOpen}
         onClose={() => setSourcesOpen(false)}
-        title="Quantitative Methodology, Tax Mechanics &amp; Institutional Sources"
-        subtitle="How FireSage models sequence risk, inflation, tax drag, lock-ins, and healthcare cliffs"
-        maxWidth="780px"
+        title="Quantitative Methodology, Global Tax Mechanics &amp; Institutional Sources"
+        subtitle="How FireSage models sequence risk, inflation, tax drag, statutory lock-ins, cross-border FX, and healthcare across 5 jurisdictions"
+        maxWidth="820px"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '0.86rem' }}>
           <div>
-            <strong>1. Market &amp; Inflation Datasets</strong>
+            <strong>1. Multi-Market Historical &amp; Inflation Datasets</strong>
             <p className="fs-pane-note">
-              <strong>USA (1928–2025):</strong> Aswath Damodaran (NYU Stern) S&amp;P 500 Total Return, 10Y US Treasury,
-              3M T-Bill &amp; Gold series paired with Robert Shiller (Yale) CAPE (P/E10) and BLS Headline &amp; Medical
-              Care CPI.
+              <strong>USA (1928–2025):</strong> Damodaran (NYU Stern) S&amp;P 500 Total Return, 10Y Treasury, 3M T-Bill
+              &amp; Gold + Shiller CAPE (P/E10) &amp; BLS Headline/Medical CPI.
               <br />
-              <strong>India (1980–2025):</strong> S&amp;P BSE Sensex Total Return spliced with NSE Nifty 50 TRI, RBI DBIE
-              10Y GoI G-Sec &amp; 91-day T-Bill yields, INR Gold, and MoSPI CPI-Combined separated from 12%–14% Indian
-              Medical Inflation.
+              <strong>India (1980–2025):</strong> BSE Sensex / NSE Nifty 50 TRI, RBI 10Y GoI G-Sec &amp; 91d T-Bill, INR
+              Gold, MoSPI CPI-Combined + 11%–14% Indian Medical CPI (incl. Dehradun, Kodaikanal &amp; Kochi/Cochin Zone
+              &amp; hill-station tertiary travel buffers).
+              <br />
+              <strong>Australia (1980–2025):</strong> S&amp;P/ASX 200 Accumulation Index (incl. franked dividend yield),
+              RBA 10Y Commonwealth Govt Bonds &amp; Cash Rate, AUD Gold, ABS CPI &amp; AIHW Health CPI.
+              <br />
+              <strong>Europe &amp; Switzerland (1980–2025):</strong> MSCI Europe / STOXX 600 Net Total Return, ECB /
+              German 10Y Bunds &amp; 3M Euribor, EUR Gold, and Eurostat HICP / Swiss BFS CPI.
+              <br />
+              <strong>New Zealand (1980–2025):</strong> S&amp;P/NZX 50 Gross Index, RBNZ 10Y NZGB &amp; 90-Day Bank
+              Bills, NZD Gold, Stats NZ CPI &amp; private surgical medical inflation.
             </p>
           </div>
           <div>
-            <strong>2. Stochastic Engines &amp; Common Random Numbers (CRN)</strong>
+            <strong>2. Stochastic Engines, Cross-Border FX &amp; Common Random Numbers (CRN)</strong>
             <p className="fs-pane-note">
               Default mode uses <strong>Politis &amp; Romano (1994) Stationary Block Bootstrap</strong> (geometric mean
-              4-year blocks) to preserve fat-tail crashes, cross-asset crisis correlations, and multi-year stagflation
-              waves without Gaussian IID assumptions. Goal-seek solvers apply Glasserman Common Random Numbers variance
-              reduction.
+              4-year blocks) to preserve fat-tail crashes, multi-year stagflation waves, and asset correlations. Cross-border
+              relocation converts spending, taxes, and medical outlays via long-run FX parity while preserving your working
+              country&apos;s statutory pension lock-in rules and switching retirement residency taxes &amp; healthcare on the
+              day you move.
             </p>
           </div>
           <div>
-            <strong>3. Dual-Jurisdiction Tax, Lock-In &amp; Healthcare Cliffs (2026 Rules)</strong>
+            <strong>3. 5-Jurisdiction Tax, Pension Lock-In &amp; Healthcare Formulas (2025–2026 Rules)</strong>
             <p className="fs-pane-note">
-              <strong>India:</strong> New Regime slabs with ₹12L Section 87A rebate (properly excluding Section 112A
-              equity gains), 12.5% Equity LTCG above ₹1.25L annual tax-free harvesting, slab-taxed Debt MFs, strict Age
-              60 NPS 60/40 unlock, and Zone-calibrated retail Family Floater + Super Top-up medical escalation.
+              <strong>🇮🇳 India:</strong> New Regime slabs with ₹12L Sec 87A rebate (excluding Sec 112A equity gains),
+              12.5% Equity LTCG above ₹1.25L annual harvest, Age-60 EPF/PPF/NPS 60/40 unlock, and Zone-calibrated Family
+              Floater + ₹1Cr Super Top-up + hill-station tertiary care buffer.
               <br />
-              <strong>USA:</strong> Federal + State tax engines (CA 13.3%, NY, NC 4.25%, WA, CO, TX/FL 0%), 5-year
-              seasoned Roth Conversion Ladder capped beneath the restored <strong>2026 hard 400% FPL ACA Subsidy Cliff</strong>,
-              Age 65 Medicare + IRMAA transition, and SECURE 2.0 Age 73/75 RMDs.
+              <strong>🇺🇸 USA:</strong> Federal + State brackets, 5-yr Roth Conversion Ladder capped below the restored{' '}
+              <strong>2026 hard 400% FPL ACA Subsidy Cliff</strong>, Age-65 Medicare + IRMAA, and SECURE 2.0 Age 73/75 RMDs.
+              <br />
+              <strong>🇦🇺 Australia:</strong> Superannuation (15% concessional entry tax, ~0.6% fund earnings drag,{' '}
+              <strong>100% tax-free unlock at Preservation Age 60</strong>, 4%–14% min pension drawdowns), Stage 3
+              resident brackets (0%/16%/30%/37%/45% + LITO + 2% Medicare Levy + 50% CGT discount + ASX 30% franking
+              credit offset), <strong>Age-67 Centrelink Age Pension</strong> assets-test taper (A$78/yr per A$1,000 above
+              homeowner threshold), and Medicare + Private Hospital/Extras + gap OOP.
+              <br />
+              <strong>🇪🇺 Europe &amp; CH:</strong> Sub-jurisdiction rules: <strong>Zurich &amp; Lugano (CH)</strong> 0%
+              private CGT + cantonal net wealth tax (0.18%–0.32%) + mandatory per-capita LAMal insurance;{' '}
+              <strong>Southern Italy (Puglia/Sicily)</strong> Art. 24-ter <strong>7% flat foreign retiree tax (10 yrs)</strong>{' '}
+              then 26% CGT + SSN; <strong>Greece (Crete/Peloponnese)</strong> Art. 5B <strong>7% flat retiree tax (15 yrs)</strong>;{' '}
+              <strong>Portugal (Algarve/Cascais)</strong> Law 31/2024 30% CGT taper (19.6% effective after 8+ yrs) + SNS/private;{' '}
+              <strong>Spain (Valencia/Málaga)</strong> 19%–30% <em>Renta del Ahorro</em> + Sanitas private;{' '}
+              <strong>France (Nice/Aix)</strong> 30% PFU + 6.5% PUMA CSM.
+              <br />
+              <strong>🇳🇿 New Zealand:</strong> <strong>KiwiSaver locked until Age 65</strong> (100% tax-free unlock),{' '}
+              <strong>Universal non-means-tested NZ Superannuation at Age 65</strong>, 0% general CGT +{' '}
+              <strong>Foreign Investment Fund (FIF) 5% Fair Dividend Rate (FDR)</strong> above NZ$50k/100k{' '}
+              <em>de minimis</em> capped at <strong>28% Multi-Rate PIE PIR</strong> (+ 4-yr Transitional Resident FIF
+              holiday for incoming cross-border retirees), and Health NZ + ACC + age-rated Southern Cross surgical cover.
             </p>
           </div>
         </div>

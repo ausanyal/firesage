@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { CountryCode, YearBand } from '../types';
-import { formatMoneyCompact } from '../utils/format';
+import { COUNTRY_META, formatMoneyCompact } from '../utils/format';
 
 interface CashFlowStreamChartProps {
   bands: YearBand[];
@@ -20,6 +20,9 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
   const [viewMode, setViewMode] = useState<'outflows' | 'liquidity'>('outflows');
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const effRetCountry = retireCountry || country;
+  const acctMeta = COUNTRY_META[country] || COUNTRY_META.IN;
+  const retMeta = COUNTRY_META[effRetCountry] || acctMeta;
+  const unlockAge = acctMeta.unlockAge;
 
   if (bands.length === 0) return null;
 
@@ -81,7 +84,7 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
 
       {liquidityWarningAge > 0 && (
         <div className="fs-alert-warning" role="status">
-          ⚠️ <strong>Early-Retirement Liquidity Bridge Alert (Median Age {liquidityWarningAge}):</strong> A meaningful share of stress paths exhaust liquid taxable/seasoned funds before statutory unlock age (60) while wealth remains locked in {country === 'IN' ? 'EPF / PPF / NPS' : 'Traditional 401(k) / unseasoned Roth'}. Increase taxable bridge share or enable {country === 'US' ? 'Roth Conversion Ladder' : 'Arbitrage/Equity bridge'}!
+          ⚠️ <strong>Early-Retirement Liquidity Bridge Alert (Median Age {liquidityWarningAge}):</strong> A meaningful share of stress paths exhaust liquid funds before statutory unlock age ({unlockAge}) while wealth remains locked in {acctMeta.lockedShort}. Increase liquid taxable bridge share or adjust target FIRE age!
         </div>
       )}
 
@@ -90,16 +93,15 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
         {viewMode === 'outflows' ? (
           <span>
             <strong>Why Spend + Health + Tax exists:</strong> Your monthly budget is only part of the bill. This view
-            exposes hidden retirement drag from rising <strong>Healthcare</strong> (
-            {effRetCountry === 'US' ? 'ACA 2026 Cliff + Medicare' : 'Family Floater + 9% Medical Inflation'}) and{' '}
-            <strong>Income / Capital Gains Taxes</strong>, plus how guaranteed income offsets them.
+            exposes hidden retirement drag from rising <strong>Healthcare</strong> ({retMeta.healthcareExplainer}) and{' '}
+            <strong>Income / Capital Gains / Wealth Taxes</strong>, plus how guaranteed pensions offset them.
           </span>
         ) : (
           <span>
-            <strong>Why Liquid vs Locked exists (Early-Retirement Bridge Check):</strong> If you FIRE before Age 60,{' '}
-            <strong className="text-emerald">Spendable Liquid Funds</strong> must carry every year until Age 60 without
-            triggering penalties or lock-ins on <strong style={{ color: '#818cf8' }}>Locked Retirement Accounts</strong> (
-            {country === 'IN' ? 'EPF / PPF / NPS' : '401(k) / Unseasoned Roth'}).
+            <strong>Why Liquid vs Locked exists (Early-Retirement Bridge Check):</strong> If you FIRE before Age{' '}
+            {unlockAge}, <strong className="text-emerald">Spendable Liquid Funds</strong> must carry every year until
+            Age {unlockAge} without triggering penalties or preservation locks on{' '}
+            <strong style={{ color: '#818cf8' }}>Locked Retirement Accounts</strong> ({acctMeta.lockedShort}).
           </span>
         )}
       </div>
@@ -175,10 +177,10 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
             );
           })}
 
-          {/* Vertical Reference Markers for FIRE Age & Age 60 Statutory Unlock */}
+          {/* Vertical Reference Markers for FIRE Age & Statutory Unlock Age */}
           {(() => {
             const fireIdx = retirementAge !== undefined ? bands.findIndex((b) => b.age === retirementAge) : -1;
-            const unlockIdx = bands.findIndex((b) => b.age === 60);
+            const unlockIdx = bands.findIndex((b) => b.age === unlockAge);
             return (
               <>
                 {fireIdx >= 0 && (
@@ -221,7 +223,7 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
                       fontSize="9.5"
                       fontWeight="700"
                     >
-                      Age 60 Unlock
+                      Age {unlockAge} Unlock
                     </text>
                   </g>
                 )}
@@ -252,16 +254,16 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
         {viewMode === 'outflows' ? (
           <div className="fs-legend-row">
             <span><i style={{ background: '#10b981' }} /> Core Living: <strong>{formatMoneyCompact(hovered.flow_core_living_out_real, country)}/yr</strong></span>
-            <span><i style={{ background: '#0ea5e9' }} /> Healthcare ({effRetCountry === 'US' && hovered.age < 65 ? 'ACA 2026' : effRetCountry === 'US' ? 'Medicare' : 'Floater+Med'}): <strong>{formatMoneyCompact(hovered.flow_healthcare_out_real, country)}/yr</strong></span>
+            <span><i style={{ background: '#0ea5e9' }} /> Healthcare ({effRetCountry === 'US' && hovered.age < 65 ? 'ACA 2026' : effRetCountry === 'US' ? 'Medicare' : retMeta.healthcareShort}): <strong>{formatMoneyCompact(hovered.flow_healthcare_out_real, country)}/yr</strong></span>
             <span><i style={{ background: '#f59e0b' }} /> Taxes: <strong>{formatMoneyCompact(hovered.flow_taxes_out_real, country)}/yr</strong></span>
-            <span><i style={{ background: '#a855f7' }} /> {country === 'US' ? 'Social Security' : 'NPS/Pension'}: <strong>{formatMoneyCompact(hovered.flow_guaranteed_in_real, country)}/yr</strong></span>
+            <span><i style={{ background: '#a855f7' }} /> {acctMeta.pensionShort}: <strong>{formatMoneyCompact(hovered.flow_guaranteed_in_real, country)}/yr</strong></span>
           </div>
         ) : (
           <div className="fs-legend-row">
             <span><i style={{ background: '#10b981' }} /> Spendable Liquid at Age {hovered.age}: <strong>{formatMoneyCompact(hovered.liquid_real_p50, country)}</strong></span>
-            <span><i style={{ background: '#6366f1' }} /> Statutory Locked ({country === 'IN' ? 'EPF/PPF/NPS <60' : '401k/Unseasoned Roth <59.5'}): <strong>{formatMoneyCompact(hovered.locked_real_p50, country)}</strong></span>
+            <span><i style={{ background: '#6366f1' }} /> Statutory Locked ({acctMeta.lockedShort} &lt;{unlockAge}): <strong>{formatMoneyCompact(hovered.locked_real_p50, country)}</strong></span>
             {hovered.flow_roth_or_harvest_real > 0 && (
-              <span>✨ {country === 'US' ? 'ACA-Safe Roth Ladder Rung' : 'Sec 112A Tax-Free LTCG Harvest'}: <strong>{formatMoneyCompact(hovered.flow_roth_or_harvest_real, country)}</strong></span>
+              <span>✨ {acctMeta.taxAlphaChip}: <strong>{formatMoneyCompact(hovered.flow_roth_or_harvest_real, country)}</strong></span>
             )}
           </div>
         )}

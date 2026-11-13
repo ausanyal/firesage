@@ -13,9 +13,18 @@ import (
 
 const baseSimulationYear = 2026
 
+// StatutoryUnlockAge returns the statutory penalty-free retirement fund preservation/unlock age
+// for the accumulation jurisdiction (Age 65 for NZ KiwiSaver; Age 60 for IN NPS, US 401k/IRA, AU Super, EU Pillar 2/3a).
+func StatutoryUnlockAge(country data.CountryCode) int {
+	if country == data.CountryNewZealand {
+		return 65
+	}
+	return 60
+}
+
 // NormalizePlanInput fills defaults and clamps parameters into safe, consistent bounds.
 func NormalizePlanInput(in PlanInput) PlanInput {
-	if in.Country != data.CountryUSA && in.Country != data.CountryIndia {
+	if !data.IsValidCountry(in.Country) {
 		in.Country = data.CountryIndia
 	}
 	if in.CurrentAge < 18 {
@@ -25,7 +34,7 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 		in.CurrentAge = 85
 	}
 	if in.RetirementAge <= in.CurrentAge {
-		in.RetirementAge = minInt(in.CurrentAge+12, 60)
+		in.RetirementAge = minInt(in.CurrentAge+12, StatutoryUnlockAge(in.Country))
 	}
 	if in.HorizonAge <= in.RetirementAge+2 {
 		in.HorizonAge = maxInt(92, in.RetirementAge+15)
@@ -39,7 +48,7 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	if in.RetirementCityID == "" {
 		in.RetirementCityID = currCity.ID
 	} else {
-		// Allow cross-country retirement (e.g., work in India -> retire in USA or vice versa).
+		// Allow any-to-any global cross-country retirement (e.g., India/US/AU/EU/NZ -> any of 33 cities).
 		retCity := data.GetCity(in.RetirementCityID, currCity.Country)
 		in.RetirementCityID = retCity.ID
 	}
@@ -61,10 +70,13 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	// Normalize asset allocation weights
 	sumW := in.Allocation.Equity + in.Allocation.Debt + in.Allocation.Gold + in.Allocation.Cash
 	if sumW <= 0.001 {
-		if in.Country == data.CountryIndia {
+		switch in.Country {
+		case data.CountryIndia:
 			in.Allocation = AssetAllocation{Equity: 0.65, Debt: 0.22, Gold: 0.08, Cash: 0.05, UseBondTent: true}
-		} else {
-			in.Allocation = AssetAllocation{Equity: 0.70, Debt: 0.22, Gold: 0.03, Cash: 0.05, UseBondTent: true}
+		case data.CountryEurope:
+			in.Allocation = AssetAllocation{Equity: 0.68, Debt: 0.23, Gold: 0.04, Cash: 0.05, UseBondTent: true}
+		default:
+			in.Allocation = AssetAllocation{Equity: 0.72, Debt: 0.20, Gold: 0.03, Cash: 0.05, UseBondTent: true}
 		}
 	} else {
 		in.Allocation.Equity = math.Max(0, in.Allocation.Equity) / sumW
@@ -86,9 +98,12 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 		in.GuardrailCeilingPct = 1.25
 	}
 	if in.SocialSecurityStartAge <= 0 {
-		if in.Country == data.CountryUSA {
+		switch in.Country {
+		case data.CountryUSA, data.CountryAustralia:
 			in.SocialSecurityStartAge = 67
-		} else {
+		case data.CountryEurope, data.CountryNewZealand:
+			in.SocialSecurityStartAge = 65
+		default:
 			in.SocialSecurityStartAge = 60
 		}
 	}
@@ -122,7 +137,8 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 }
 
 func defaultBuckets(country data.CountryCode, corpus float64) AccountBuckets {
-	if country == data.CountryUSA {
+	switch country {
+	case data.CountryUSA:
 		return AccountBuckets{
 			UseGranular:       false,
 			TaxableEquity:     corpus * 0.40,
@@ -132,15 +148,46 @@ func defaultBuckets(country data.CountryCode, corpus float64) AccountBuckets {
 			TaxFreeAccount:    corpus * 0.14, // Roth IRA / HSA
 			PensionLocked:     0,
 		}
-	}
-	return AccountBuckets{
-		UseGranular:       false,
-		TaxableEquity:     corpus * 0.48, // Equity + Arbitrage Mutual Funds
-		TaxableCostBasis:  0.65,
-		TaxableDebtCash:   corpus * 0.14, // Liquid / Debt Funds / FDs
-		TaxDeferredLocked: corpus * 0.20, // EPF / VPF
-		TaxFreeAccount:    corpus * 0.10, // PPF (EEE)
-		PensionLocked:     corpus * 0.08, // NPS Tier-I (locked till 60)
+	case data.CountryAustralia:
+		return AccountBuckets{
+			UseGranular:       false,
+			TaxableEquity:     corpus * 0.38, // Personal ETF / ASX Franked Brokerage
+			TaxableCostBasis:  0.65,
+			TaxableDebtCash:   corpus * 0.08, // High-Interest Cash / Offset
+			TaxDeferredLocked: corpus * 0.54, // Superannuation (Preservation Age 60, 100% tax-free post-60)
+			TaxFreeAccount:    0,
+			PensionLocked:     0,
+		}
+	case data.CountryEurope:
+		return AccountBuckets{
+			UseGranular:       false,
+			TaxableEquity:     corpus * 0.44, // UCITS ETF Brokerage
+			TaxableCostBasis:  0.65,
+			TaxableDebtCash:   corpus * 0.10, // Sovereign Bonds / Money Market
+			TaxDeferredLocked: corpus * 0.32, // Swiss Pillar 2 (BVG) / Occupational Pension
+			TaxFreeAccount:    corpus * 0.14, // Pillar 3a / Assurance-Vie / PEA Wrapper
+			PensionLocked:     0,
+		}
+	case data.CountryNewZealand:
+		return AccountBuckets{
+			UseGranular:       false,
+			TaxableEquity:     corpus * 0.46, // Liquid PIE / Global Equity Funds
+			TaxableCostBasis:  0.65,
+			TaxableDebtCash:   corpus * 0.10, // NZ Term Deposits / Cash PIE
+			TaxDeferredLocked: corpus * 0.44, // KiwiSaver (Locked until Age 65, 100% tax-free unlock)
+			TaxFreeAccount:    0,
+			PensionLocked:     0,
+		}
+	default:
+		return AccountBuckets{
+			UseGranular:       false,
+			TaxableEquity:     corpus * 0.48, // Equity + Arbitrage Mutual Funds
+			TaxableCostBasis:  0.65,
+			TaxableDebtCash:   corpus * 0.14, // Liquid / Debt Funds / FDs
+			TaxDeferredLocked: corpus * 0.20, // EPF / VPF
+			TaxFreeAccount:    corpus * 0.10, // PPF (EEE)
+			PensionLocked:     corpus * 0.08, // NPS Tier-I (locked till 60)
+		}
 	}
 }
 
@@ -452,17 +499,33 @@ func simulatePathInternal(
 
 		// Grow buckets for the year
 		if taxableEq > 0 {
-			taxableEq *= (1.0 + eqGoldBlendRet)
+			// In New Zealand during accumulation, ongoing PIE/FIF tax drag applies annually on global shares (~0.9% drag)
+			nzAccFIFDrag := 0.0
+			if !isRetired && in.Country == data.CountryNewZealand && taxableEq > 80_000*cpiIndex {
+				nzAccFIFDrag = 0.009
+			}
+			taxableEq *= (1.0 + eqGoldBlendRet - nzAccFIFDrag)
 		}
 		if taxableDebt > 0 {
 			taxableDebt *= (1.0 + defensiveBlendRet)
 		}
 		if taxDeferred > 0 {
-			if in.Country == data.CountryIndia {
+			switch in.Country {
+			case data.CountryIndia:
 				// EPF sovereign-backed debt-like steady return (~7.8%–8.4% linked to debt/cash regime)
 				epfRate := clamp(0.65*debtRet+0.35*cashRet+0.008, 0.055, 0.095)
 				taxDeferred *= (1.0 + epfRate)
-			} else {
+			case data.CountryAustralia:
+				// Australian Superannuation: ~0.60% concessional fund earnings tax drag before age 60, 0% in retirement pension phase (60+)
+				superDrag := 0.0
+				if age < 60 || !isRetired {
+					superDrag = 0.006
+				}
+				taxDeferred *= (1.0 + growthBlendRet - superDrag)
+			case data.CountryNewZealand:
+				// NZ KiwiSaver PIE multi-rate fund (~0.85% internal PIE/FIF tax drag; 100% tax-free on withdrawal at 65)
+				taxDeferred *= (1.0 + growthBlendRet - 0.0085)
+			default:
 				taxDeferred *= (1.0 + growthBlendRet)
 			}
 		}
@@ -472,7 +535,7 @@ func simulatePathInternal(
 				ppfRate := clamp(0.50*debtRet+0.50*cashRet+0.005, 0.055, 0.088)
 				rothGrowthLocked += (rothSeasoned + rothGrowthLocked) * ppfRate
 			} else {
-				// US Roth grows tax-free; growth accrues to rothGrowthLocked until 59.5
+				// US Roth / EU Pillar 3a wrapper grows tax-free; growth accrues to rothGrowthLocked until unlock
 				totRoth := rothSeasoned + rothGrowthLocked + sumRungs(rothRungs)
 				gain := totRoth * growthBlendRet
 				if gain >= 0 {
@@ -505,7 +568,6 @@ func simulatePathInternal(
 				taxableEq += move
 				taxableBasis += move
 			}
-			// (Avoid forced taxable equity sales just to rebalance if unnecessary tax drag; drawdown handles trimming equity first when overweight!)
 		}
 
 		// Evaluate custom Life Events active at this age
@@ -537,12 +599,12 @@ func simulatePathInternal(
 		var savingsInNom, portfolioDrawNom, guaranteedInNom, rothOrHarvestNom float64
 		var coreLivingOutNom, healthcareOutNom, taxesOutNom float64
 		crunchThisYear := false
+		unlockAge := StatutoryUnlockAge(in.Country)
 
 		if !isRetired {
 			// ===================== ACCUMULATION PHASE =====================
 			yearsWorked := age - in.CurrentAge
 			stepUpMult := math.Pow(1.0+in.AnnualSavingsStepUp, float64(yearsWorked))
-			// Note: AnnualSavingsStepUp is nominal career growth; if 0, inflate with CPI so real savings stay constant.
 			savMult := cpiIndex
 			if in.AnnualSavingsStepUp > 0 {
 				savMult = stepUpMult
@@ -572,10 +634,21 @@ func simulatePathInternal(
 				}
 
 				if lockedSavNom > 0 {
-					if in.Country == data.CountryUSA {
+					switch in.Country {
+					case data.CountryUSA:
 						taxDeferred += lockedSavNom * 0.68
 						rothSeasoned += lockedSavNom * 0.32
-					} else {
+					case data.CountryAustralia:
+						// Superannuation concessional contributions incur 15% entry tax inside the Super fund
+						taxDeferred += lockedSavNom * 0.85
+					case data.CountryEurope:
+						// Split across Pillar 2 Occupational Pension (68%) + Pillar 3a / tax-advantaged wrapper (32%)
+						taxDeferred += lockedSavNom * 0.68
+						rothGrowthLocked += lockedSavNom * 0.32
+					case data.CountryNewZealand:
+						// KiwiSaver (after-tax / ESCT-netted contributions, preserved until Age 65)
+						taxDeferred += lockedSavNom
+					default:
 						taxDeferred += lockedSavNom * 0.5625
 						rothSeasoned += lockedSavNom * 0.21875
 						pensionLocked += lockedSavNom * 0.21875
@@ -586,7 +659,8 @@ func simulatePathInternal(
 
 				netAddition := savingsInNom + milestoneInNom - milestoneOutNom
 				if netAddition >= 0 {
-					if in.Country == data.CountryUSA {
+					switch in.Country {
+					case data.CountryUSA:
 						toTaxableEq := netAddition * 0.42
 						toTaxableDebt := netAddition * 0.08
 						to401k := netAddition * 0.34
@@ -596,7 +670,30 @@ func simulatePathInternal(
 						taxableDebt += toTaxableDebt
 						taxDeferred += to401k
 						rothSeasoned += toRoth
-					} else {
+					case data.CountryAustralia:
+						toTaxableEq := netAddition * 0.50
+						toTaxableDebt := netAddition * 0.10
+						toSuper := netAddition * 0.40 * 0.85 // 15% Super entry tax
+						taxableEq += toTaxableEq
+						taxableBasis += toTaxableEq
+						taxableDebt += toTaxableDebt
+						taxDeferred += toSuper
+					case data.CountryEurope:
+						toTaxableEq := netAddition * 0.50
+						toTaxableDebt := netAddition * 0.10
+						taxableEq += toTaxableEq
+						taxableBasis += toTaxableEq
+						taxableDebt += toTaxableDebt
+						taxDeferred += netAddition * 0.28
+						rothGrowthLocked += netAddition * 0.12
+					case data.CountryNewZealand:
+						toTaxableEq := netAddition * 0.58
+						toTaxableDebt := netAddition * 0.12
+						taxableEq += toTaxableEq
+						taxableBasis += toTaxableEq
+						taxableDebt += toTaxableDebt
+						taxDeferred += netAddition * 0.30
+					default:
 						toTaxableEq := netAddition * 0.56
 						toTaxableDebt := netAddition * 0.12
 						toEPF := netAddition * 0.18
@@ -610,7 +707,6 @@ func simulatePathInternal(
 						pensionLocked += toNPS
 					}
 				} else {
-					// Large pre-retirement milestone outflow exceeding annual savings (e.g. home down payment / sabbatical)
 					deficit := -netAddition
 					drawn, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, deficit)
 					rem := deficit - drawn
@@ -631,15 +727,13 @@ func simulatePathInternal(
 			coreLivingOutNom = in.DesiredMonthlySpend * 12.0 * cpiIndex
 		} else {
 			// ===================== RETIREMENT / DECUMULATION PHASE =====================
+			yearsInRet := age - in.RetirementAge
 			totalStartNom := taxableEq + taxableDebt + taxDeferred + rothSeasoned + rothGrowthLocked + sumRungs(rothRungs) + pensionLocked
 			totalStartReal := totalStartNom / cpiIndex
 
 			// 1. Compute Core Living Spend in today's purchasing power per active WithdrawalStrategy
 			targetSpendReal := baseRetireAnnualReal
 			if in.UseSpendingSmile {
-				// David Blanchett empirical "Retirement Spending Smile": active Go-Go early years,
-				// gradual real decline across 60-78 Slow-Go years (while Healthcare separately models late-life spike)
-				yearsInRet := age - in.RetirementAge
 				if age >= 58 && age <= 78 {
 					smileMult := math.Max(0.86, 1.0-0.007*float64(minInt(yearsInRet, 20)))
 					targetSpendReal *= smileMult
@@ -653,11 +747,9 @@ func simulatePathInternal(
 				if totalStartReal > 0 {
 					currWR := targetSpendReal / totalStartReal
 					if currWR > initWR*1.20 {
-						// Capital preservation guardrail: trim discretionary spending smoothly down to floor
 						ratio := (initWR * 1.20) / currWR
 						targetSpendReal *= clamp(ratio, in.GuardrailFloorPct, 1.0)
 					} else if currWR < initWR*0.78 {
-						// Prosperity guardrail: raise lifestyle up to ceiling
 						ratio := (initWR * 0.78) / math.Max(0.005, currWR)
 						targetSpendReal *= clamp(ratio, 1.0, in.GuardrailCeilingPct)
 					}
@@ -673,32 +765,40 @@ func simulatePathInternal(
 
 			coreLivingOutNom = targetSpendReal * cpiIndex
 
-			// 2. Guaranteed Income Floors (Social Security / Pension / NPS Annuity)
+			// 2. Guaranteed Income Floors (Social Security / State Pension / NPS Annuity / AU Centrelink Age Pension)
 			if age >= in.SocialSecurityStartAge && in.SocialSecurityMonthlyReal > 0 {
 				guaranteedInNom += in.SocialSecurityMonthlyReal * 12.0 * cpiIndex
 			}
 			guaranteedInNom += npsAnnuityAnnualNom
 
-			// 3. Country-specific Healthcare, RMD, Tax-Smart Drawdown & Roth Ladder Sequencing
-			if in.Country == data.CountryUSA {
+			// Australia automatic means-tested Centrelink Age Pension from Age 67 (for AU citizens/residents retiring in AU)
+			if in.Country == data.CountryAustralia && activeCity.Country == data.CountryAustralia && age >= 67 {
+				assessableAUD := data.ConvertCurrency(totalStartNom, in.Country, data.CountryAustralia)
+				auPensionAUD := tax.AustraliaAgePensionAnnual(age, in.IsCouple, assessableAUD, cpiIndex)
+				auPensionNom := data.ConvertCurrency(auPensionAUD, data.CountryAustralia, in.Country)
+				if auPensionNom > guaranteedInNom {
+					guaranteedInNom = auPensionNom
+				}
+			}
+
+			// 3. Country-specific Healthcare, RMD, Tax-Smart Drawdown & Unlock Sequencing
+			switch in.Country {
+			case data.CountryUSA:
 				ordinaryIncome := milestoneTaxableInNom + guaranteedInNom*0.85 // Up to 85% of SS taxable
 				realizedLTCG := 0.0
 
 				// Enforce SECURE 2.0 Required Minimum Distributions (Age 73 or 75)
 				rmdDiv := tax.USRMDDivisor(age, birthYear)
-				mandatoryRMD := 0.0
 				if rmdDiv > 0 && taxDeferred > 0 {
-					mandatoryRMD = taxDeferred / rmdDiv
+					mandatoryRMD := taxDeferred / rmdDiv
 					taxDeferred -= mandatoryRMD
 					taxableDebt += mandatoryRMD
 					ordinaryIncome += mandatoryRMD
 				}
 
-				// Estimate baseline healthcare (using retirement domicile's healthcare system & FX)
 				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex)
 				grossNeed := coreLivingOutNom + estHealth + milestoneOutNom - guaranteedInNom - milestoneInNom
 				if grossNeed < 0 {
-					// Surplus guaranteed/milestone income gets reinvested into taxable
 					surplus := -grossNeed
 					taxableEq += surplus * 0.7
 					taxableBasis += surplus * 0.7
@@ -706,14 +806,11 @@ func simulatePathInternal(
 					grossNeed = 0
 				}
 
-				// Draw sequence:
-				// Step A: Cash/Debt + Taxable Brokerage (basis-aware LTCG)
 				drawnLiq, ltcgRealized := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, grossNeed)
 				realizedLTCG += ltcgRealized
 				portfolioDrawNom += drawnLiq
 				remNeed := grossNeed - drawnLiq
 
-				// Step B: Seasoned Roth principal & matured 5-year conversion ladder rungs (100% tax & penalty free!)
 				if remNeed > 0 && rothSeasoned > 0 {
 					pull := math.Min(remNeed, rothSeasoned)
 					rothSeasoned -= pull
@@ -721,10 +818,8 @@ func simulatePathInternal(
 					remNeed -= pull
 				}
 
-				// Step C: Post-59.5 (age >= 60) Penalty-Free Traditional 401(k)/IRA + Roth Growth
 				if remNeed > 0 && age >= 60 {
 					if taxDeferred > 0 {
-						// Gross up slightly for marginal tax
 						pull := math.Min(remNeed*1.16, taxDeferred)
 						taxDeferred -= pull
 						ordinaryIncome += pull
@@ -744,15 +839,12 @@ func simulatePathInternal(
 					}
 				}
 
-				// Step D: Pre-60 Emergency Liquidity Fallback!
-				// If remNeed > 0 at age < 60 while locked 401(k)/Roth growth still exists, record Liquidity Crunch!
 				if remNeed > 0 && age < 60 && (taxDeferred+rothGrowthLocked+sumRungs(rothRungs) > 1.0) {
 					crunchThisYear = true
 					hadLiquidityCrunch = true
 					if firstCrunchAge == 0 {
 						firstCrunchAge = age
 					}
-					// Forced early 401(k) tap incurs ordinary tax + 10% IRS early withdrawal penalty
 					if taxDeferred > 0 {
 						grossPull := math.Min(taxDeferred, remNeed*1.28)
 						taxDeferred -= grossPull
@@ -775,7 +867,6 @@ func simulatePathInternal(
 					}
 				}
 
-				// Step E: Automated ACA-Cliff-Aware 5-Year Roth Conversion Ladder!
 				if in.EnableTaxOptimization && taxDeferred > 0 && age < 73 {
 					magiCeiling := tax.OptimalRothConversionCeiling(age, in.IsCouple, cpiIndex)
 					currentMAGI := ordinaryIncome + realizedLTCG
@@ -789,14 +880,19 @@ func simulatePathInternal(
 					}
 				}
 
-				// Final exact healthcare & domicile tax calculation (US or India depending on RetirementCity)
 				finalMAGI := ordinaryIncome + realizedLTCG
 				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
 				extraHealth := math.Max(0, healthcareOutNom-estHealth)
-				totalIncomeTax := computeResidencyTaxNom(in.Country, activeCity, in.IsCouple, ordinaryIncome, realizedLTCG, cpiIndex)
+				assessableNW := taxableEq + taxableDebt + rothSeasoned
+				if age >= 60 {
+					assessableNW += taxDeferred + rothGrowthLocked
+				}
+				totalIncomeTax := computeResidencyTaxNom(
+					in.Country, currCity, activeCity, in.IsCouple, in.EnableTaxOptimization,
+					ordinaryIncome, realizedLTCG, assessableNW, taxableEq, yearsInRet, age, cpiIndex,
+				)
 				taxesOutNom += totalIncomeTax
 
-				// Pay tax + any healthcare delta from remaining accounts
 				taxAndHealthBill := totalIncomeTax + extraHealth
 				if taxAndHealthBill > 0 {
 					paid, extraGain := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, taxAndHealthBill)
@@ -826,11 +922,165 @@ func simulatePathInternal(
 						depletionAge = age
 					}
 				}
-			} else {
+
+			case data.CountryAustralia, data.CountryEurope, data.CountryNewZealand:
+				// ===================== AU / EU / NZ DECUMULATION =====================
+				ordinaryIncome := milestoneTaxableInNom + guaranteedInNom
+				realizedEqGain := 0.0
+
+				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex)
+				grossNeed := coreLivingOutNom + estHealth + milestoneOutNom - guaranteedInNom - milestoneInNom
+				if grossNeed < 0 {
+					surplus := -grossNeed
+					taxableEq += surplus * 0.70
+					taxableBasis += surplus * 0.70
+					taxableDebt += surplus * 0.30
+					grossNeed = 0
+				}
+
+				remNeed := grossNeed
+
+				// Australia Account-Based Super Pension mandatory minimum drawdown from Age 60+ (100% tax-free!)
+				if in.Country == data.CountryAustralia && age >= 60 && taxDeferred > 0 {
+					minSuper := taxDeferred * tax.AustraliaSuperMinDrawRate(age)
+					if minSuper > 0 {
+						taxDeferred -= minSuper
+						used := math.Min(remNeed, minSuper)
+						portfolioDrawNom += used
+						remNeed -= used
+						if minSuper > used {
+							taxableDebt += minSuper - used
+						}
+					}
+				}
+
+				// Step A: Liquid Taxable Portfolio (Cash/Bonds + Brokerage/PIE)
+				if remNeed > 0 {
+					debtBefore := taxableDebt
+					drawnLiq, eqGain := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, remNeed)
+					debtDrawn := debtBefore - taxableDebt
+					ordinaryIncome += debtDrawn * 0.22 // Interest/coupon portion of defensive fixed-income draw
+					realizedEqGain += eqGain
+					portfolioDrawNom += drawnLiq
+					remNeed -= drawnLiq
+				}
+
+				// Step B: Seasoned Tax-Free Wrapper
+				if remNeed > 0 && rothSeasoned > 0 {
+					pull := math.Min(remNeed, rothSeasoned)
+					rothSeasoned -= pull
+					portfolioDrawNom += pull
+					remNeed -= pull
+				}
+
+				// Step C: Statutory Retirement Fund Unlock (Age 60 for AU Super & EU Pillar 2/3a; Age 65 for NZ KiwiSaver)
+				if remNeed > 0 && age >= unlockAge {
+					if in.Country == data.CountryAustralia || in.Country == data.CountryNewZealand {
+						// AU Superannuation (60+) and NZ KiwiSaver (65+) withdrawals are 100% TAX-FREE!
+						if taxDeferred > 0 {
+							pull := math.Min(remNeed, taxDeferred)
+							taxDeferred -= pull
+							portfolioDrawNom += pull
+							remNeed -= pull
+						}
+					} else {
+						// Europe: Pillar 3a / tax-advantaged wrapper first (low ~6% separate lump-sum tax or tax-free PEA), then Pillar 2 pension
+						if rothGrowthLocked > 0 {
+							pull := math.Min(remNeed*1.06, rothGrowthLocked)
+							rothGrowthLocked -= pull
+							taxesOutNom += pull * 0.055 // Modest Swiss Pillar 3a separate exit tax / wrapper exit
+							used := math.Min(remNeed, pull*0.945)
+							portfolioDrawNom += pull
+							remNeed -= used
+						}
+						if remNeed > 0 && taxDeferred > 0 {
+							pull := math.Min(remNeed*1.16, taxDeferred)
+							taxDeferred -= pull
+							ordinaryIncome += pull // Pillar 2 / occupational pension taxed as ordinary income
+							portfolioDrawNom += pull
+							used := math.Min(remNeed, pull)
+							taxableDebt += pull - used
+							remNeed -= used
+						}
+					}
+				}
+
+				// Step D: Pre-Unlock Liquidity Crunch Check (< Age 60 for AU/EU; < Age 65 for NZ KiwiSaver!)
+				if remNeed > 0 && age < unlockAge && (taxDeferred+rothGrowthLocked > 1.0) {
+					crunchThisYear = true
+					hadLiquidityCrunch = true
+					if firstCrunchAge == 0 {
+						firstCrunchAge = age
+					}
+					// Strict preservation laws in AU/NZ/EU: hardship early release incurs ~22% penalty/tax friction
+					if rothGrowthLocked > 0 {
+						grossPull := math.Min(rothGrowthLocked, remNeed*1.22)
+						rothGrowthLocked -= grossPull
+						taxesOutNom += grossPull * 0.18
+						portfolioDrawNom += grossPull
+						remNeed -= math.Min(remNeed, grossPull*0.82)
+					}
+					if remNeed > 0 && taxDeferred > 0 {
+						grossPull := math.Min(taxDeferred, remNeed*1.28)
+						taxDeferred -= grossPull
+						taxesOutNom += grossPull * 0.22
+						portfolioDrawNom += grossPull
+						remNeed -= math.Min(remNeed, grossPull*0.78)
+					}
+				}
+
+				// Step E: Residency Tax & Healthcare Settlement
+				// Note: Ununlocked Pillar 2/3a / Super / KiwiSaver are exempt from Swiss/EU net wealth taxes until unlocked
+				assessableNW := taxableEq + taxableDebt + rothSeasoned
+				if age >= unlockAge {
+					assessableNW += taxDeferred + rothGrowthLocked
+				}
+				resTax := computeResidencyTaxNom(
+					in.Country, currCity, activeCity, in.IsCouple, in.EnableTaxOptimization,
+					ordinaryIncome, realizedEqGain, assessableNW, taxableEq, yearsInRet, age, cpiIndex,
+				)
+				taxesOutNom += resTax
+
+				extraHealth := 0.0
+				healthcareOutNom = estHealth
+				if activeCity.Country == data.CountryUSA {
+					finalMAGI := ordinaryIncome + realizedEqGain
+					healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
+					extraHealth = math.Max(0, healthcareOutNom-estHealth)
+				}
+
+				bill := resTax + extraHealth
+				if bill > 0 {
+					paid, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, bill)
+					portfolioDrawNom += paid
+					remBill := bill - paid
+					if remBill > 0 && age >= unlockAge && taxDeferred > 0 {
+						p := math.Min(remBill, taxDeferred)
+						taxDeferred -= p
+						portfolioDrawNom += p
+						remBill -= p
+					}
+					if remBill > 0 && rothGrowthLocked > 0 && age >= unlockAge {
+						p := math.Min(remBill, rothGrowthLocked)
+						rothGrowthLocked -= p
+						portfolioDrawNom += p
+						remBill -= p
+					}
+					remNeed += remBill
+				}
+
+				if remNeed > 1.0 && totalRemaining(taxableEq, taxableDebt, taxDeferred, rothSeasoned, rothGrowthLocked, rothRungs, pensionLocked) <= 1.0 {
+					survived = false
+					if depletionAge == 0 {
+						depletionAge = age
+					}
+				}
+
+			default:
 				// ===================== INDIA ACCUMULATION ACCOUNTS DECUMULATION =====================
 				estMAGI := milestoneTaxableInNom + guaranteedInNom
 				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, estMAGI, cpiIndex, medIndex)
-				slabIncome := milestoneTaxableInNom + guaranteedInNom // NPS annuity + pension + consulting
+				slabIncome := milestoneTaxableInNom + guaranteedInNom
 
 				grossNeed := coreLivingOutNom + healthcareOutNom + milestoneOutNom - guaranteedInNom - milestoneInNom
 				if grossNeed < 0 {
@@ -841,16 +1091,13 @@ func simulatePathInternal(
 					grossNeed = 0
 				}
 
-				// Step A: Liquid Debt/Arbitrage/Equity MF Drawdown
-				// Track implicit debt interest portion (~30% of debt draw) + equity LTCG
 				debtBefore := taxableDebt
 				drawnLiq, realizedEqGain := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, grossNeed)
 				debtDrawn := debtBefore - taxableDebt
-				slabIncome += debtDrawn * 0.28 // Accrued gain portion of Debt MF taxed at slab
+				slabIncome += debtDrawn * 0.28
 				portfolioDrawNom += drawnLiq
 				remNeed := grossNeed - drawnLiq
 
-				// Step B: PPF (EEE Tax-Free) & Matured EPF post-55 (or bridge if retired, though NPS stays locked till 60!)
 				if remNeed > 0 && age >= 50 && rothSeasoned+rothGrowthLocked > 0 {
 					availPPF := rothSeasoned + rothGrowthLocked
 					pull := math.Min(remNeed, availPPF)
@@ -867,15 +1114,12 @@ func simulatePathInternal(
 					remNeed -= pull
 				}
 
-				// Pre-unlock Liquidity Check in India:
-				// If liquid MFs run dry before Age 55/60 while EPF/PPF/NPS still hold locked funds, flag Liquidity Crunch!
 				if remNeed > 0 && (taxDeferred+rothSeasoned+rothGrowthLocked+pensionLocked > 1.0) {
 					crunchThisYear = true
 					hadLiquidityCrunch = true
 					if firstCrunchAge == 0 {
 						firstCrunchAge = age
 					}
-					// EPF/PPF can be tapped in emergency post-employment, whereas NPS Tier-I (<60) forces 80% annuity lock!
 					if taxDeferred > 0 {
 						pull := math.Min(remNeed, taxDeferred)
 						taxDeferred -= pull
@@ -891,7 +1135,6 @@ func simulatePathInternal(
 						portfolioDrawNom += pull
 						remNeed -= pull
 					}
-					// Note: pensionLocked (NPS < 60) remains locked (only 20% lump sum allowed on premature exit)
 					if remNeed > 0 && age < 60 && pensionLocked > 0 {
 						emergencyLump := pensionLocked * 0.20
 						npsAnnuityAnnualNom += (pensionLocked * 0.80) * 0.06
@@ -903,7 +1146,6 @@ func simulatePathInternal(
 					}
 				}
 
-				// Annual ₹1.25L Section 112A Tax-Gain Harvesting on unused exemption room
 				exemption := tax.IndiaAnnualLTCGExemption(cpiIndex)
 				if in.EnableTaxOptimization && realizedEqGain < exemption && taxableEq > taxableBasis {
 					freeRoom := exemption - realizedEqGain
@@ -912,7 +1154,14 @@ func simulatePathInternal(
 					rothOrHarvestNom = harvest
 				}
 
-				taxesOutNom = computeResidencyTaxNom(in.Country, activeCity, in.IsCouple, slabIncome, realizedEqGain, cpiIndex)
+				assessableNW := taxableEq + taxableDebt
+				if age >= 60 {
+					assessableNW += taxDeferred + rothSeasoned + rothGrowthLocked
+				}
+				taxesOutNom = computeResidencyTaxNom(
+					in.Country, currCity, activeCity, in.IsCouple, in.EnableTaxOptimization,
+					slabIncome, realizedEqGain, assessableNW, taxableEq, yearsInRet, age, cpiIndex,
+				)
 				if activeCity.Country == data.CountryUSA {
 					finalMAGI := slabIncome + realizedEqGain
 					finalHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
@@ -943,9 +1192,10 @@ func simulatePathInternal(
 			}
 		}
 
-		// Compute end-of-year liquid vs locked balances
+		// Compute end-of-year liquid vs locked balances across all 5 jurisdictions
 		var liquidNom, lockedNom float64
-		if in.Country == data.CountryUSA {
+		switch in.Country {
+		case data.CountryUSA:
 			if age >= 60 {
 				liquidNom = taxableEq + taxableDebt + taxDeferred + rothSeasoned + rothGrowthLocked + sumRungs(rothRungs)
 				lockedNom = 0
@@ -953,7 +1203,15 @@ func simulatePathInternal(
 				liquidNom = taxableEq + taxableDebt + rothSeasoned
 				lockedNom = taxDeferred + rothGrowthLocked + sumRungs(rothRungs)
 			}
-		} else {
+		case data.CountryAustralia, data.CountryEurope, data.CountryNewZealand:
+			if age >= unlockAge {
+				liquidNom = taxableEq + taxableDebt + taxDeferred + rothSeasoned + rothGrowthLocked + sumRungs(rothRungs) + pensionLocked
+				lockedNom = 0
+			} else {
+				liquidNom = taxableEq + taxableDebt + rothSeasoned
+				lockedNom = taxDeferred + rothGrowthLocked + sumRungs(rothRungs) + pensionLocked
+			}
+		default:
 			if age >= 60 {
 				liquidNom = taxableEq + taxableDebt + taxDeferred + rothSeasoned + rothGrowthLocked + pensionLocked
 				lockedNom = 0
@@ -1161,30 +1419,71 @@ func computeResidencyHealthcareNom(
 	magiAcctCurrency float64,
 	cpiIndex, medIndex float64,
 ) float64 {
-	if retCity.Country == data.CountryUSA {
+	switch retCity.Country {
+	case data.CountryUSA:
 		magiUSD := data.ConvertCurrency(magiAcctCurrency, acctCountry, data.CountryUSA)
 		hcUSD := tax.USHealthcareAnnual(age, isCouple, magiUSD, retCity, cpiIndex, medIndex)
 		return data.ConvertCurrency(hcUSD, data.CountryUSA, acctCountry)
+	case data.CountryAustralia:
+		hcAUD := tax.AustraliaHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		return data.ConvertCurrency(hcAUD, data.CountryAustralia, acctCountry)
+	case data.CountryEurope:
+		hcEUR := tax.EuropeHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		return data.ConvertCurrency(hcEUR, data.CountryEurope, acctCountry)
+	case data.CountryNewZealand:
+		hcNZD := tax.NZHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		return data.ConvertCurrency(hcNZD, data.CountryNewZealand, acctCountry)
+	default:
+		hcINR := tax.IndiaHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		return data.ConvertCurrency(hcINR, data.CountryIndia, acctCountry)
 	}
-	hcINR := tax.IndiaHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
-	return data.ConvertCurrency(hcINR, data.CountryIndia, acctCountry)
 }
 
 func computeResidencyTaxNom(
 	acctCountry data.CountryCode,
-	retCity data.CityProfile,
-	isCouple bool,
-	ordinaryAcctCurrency, ltcgAcctCurrency float64,
+	currCity, retCity data.CityProfile,
+	isCouple, enableTaxOpt bool,
+	ordinaryAcctCurrency, ltcgAcctCurrency, assessableNWAcctCurrency, taxableEqAcctCurrency float64,
+	yearsInRetirement, age int,
 	cpiIndex float64,
 ) float64 {
 	ordConv := data.ConvertCurrency(ordinaryAcctCurrency, acctCountry, retCity.Country)
 	ltcgConv := data.ConvertCurrency(ltcgAcctCurrency, acctCountry, retCity.Country)
-	if retCity.Country == data.CountryUSA {
+
+	switch retCity.Country {
+	case data.CountryUSA:
 		fed := tax.USFederalTax(ordConv, ltcgConv, isCouple, cpiIndex)
 		st := tax.USStateTax(retCity.StateCode, ordConv, ltcgConv, isCouple, cpiIndex)
 		return data.ConvertCurrency(fed+st, data.CountryUSA, acctCountry)
+
+	case data.CountryAustralia:
+		// ASX franking credit offset applies when holding domestic Australian equity portfolio
+		hasFranking := enableTaxOpt && acctCountry == data.CountryAustralia
+		auTax := tax.AustraliaIncomeTax(ordConv, ltcgConv, isCouple, hasFranking, cpiIndex)
+		return data.ConvertCurrency(auTax, data.CountryAustralia, acctCountry)
+
+	case data.CountryEurope:
+		nwEUR := data.ConvertCurrency(assessableNWAcctCurrency, acctCountry, data.CountryEurope)
+		isIncomingForeign := acctCountry != data.CountryEurope || currCity.StateCode != retCity.StateCode
+		euTax := tax.EuropeTaxAnnual(
+			retCity, ordConv, ltcgConv, nwEUR,
+			isCouple, enableTaxOpt, isIncomingForeign,
+			yearsInRetirement, age, cpiIndex,
+		)
+		return data.ConvertCurrency(euTax, data.CountryEurope, acctCountry)
+
+	case data.CountryNewZealand:
+		eqNZD := data.ConvertCurrency(taxableEqAcctCurrency, acctCountry, data.CountryNewZealand)
+		// NZ IRD Transitional Tax Resident 48-month (4-yr) FIF exemption for incoming cross-border retirees
+		if acctCountry != data.CountryNewZealand && enableTaxOpt && yearsInRetirement >= 0 && yearsInRetirement < 4 {
+			eqNZD = 0
+		}
+		nzTax := tax.NZTaxAnnual(ordConv, eqNZD, isCouple, enableTaxOpt, cpiIndex)
+		return data.ConvertCurrency(nzTax, data.CountryNewZealand, acctCountry)
+
+	default:
+		ltcg := tax.IndiaEquityLTCGTax(ltcgConv, cpiIndex)
+		slab := tax.IndiaNewRegimeSlabTax(ordConv, cpiIndex)
+		return data.ConvertCurrency(ltcg+slab, data.CountryIndia, acctCountry)
 	}
-	ltcg := tax.IndiaEquityLTCGTax(ltcgConv, cpiIndex)
-	slab := tax.IndiaNewRegimeSlabTax(ordConv, cpiIndex)
-	return data.ConvertCurrency(ltcg+slab, data.CountryIndia, acctCountry)
 }

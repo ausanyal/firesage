@@ -2,19 +2,35 @@ package data
 
 // HistoryByCountry returns the full chronological historical annual market dataset for a country.
 func HistoryByCountry(country CountryCode) []MarketYear {
-	if country == CountryUSA {
+	switch country {
+	case CountryUSA:
 		return usHistory
+	case CountryAustralia:
+		return australiaHistory
+	case CountryEurope:
+		return europeHistory
+	case CountryNewZealand:
+		return nzHistory
+	default:
+		return indiaHistory
 	}
-	return indiaHistory
 }
 
-// CurrentValuation returns the latest valuation multiple (Shiller CAPE for US, Nifty P/E for India)
-// and its long-run historical median for CAPE-conditioned simulations.
+// CurrentValuation returns the latest valuation multiple (CAPE or Trailing P/E)
+// and its long-run historical median for valuation-conditioned simulations.
 func CurrentValuation(country CountryCode) (current float64, historicalMedian float64) {
-	if country == CountryUSA {
+	switch country {
+	case CountryUSA:
 		return 36.2, 17.4
+	case CountryAustralia:
+		return 19.2, 16.2
+	case CountryEurope:
+		return 18.6, 15.8
+	case CountryNewZealand:
+		return 22.8, 17.5
+	default:
+		return 22.8, 19.6
 	}
-	return 22.8, 19.6
 }
 
 // usHistory contains 98 years (1928–2025) of annual US market & macro data compiled from

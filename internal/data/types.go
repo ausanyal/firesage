@@ -4,9 +4,22 @@ package data
 type CountryCode string
 
 const (
-	CountryIndia CountryCode = "IN"
-	CountryUSA   CountryCode = "US"
+	CountryIndia      CountryCode = "IN"
+	CountryUSA        CountryCode = "US"
+	CountryAustralia  CountryCode = "AU"
+	CountryEurope     CountryCode = "EU"
+	CountryNewZealand CountryCode = "NZ"
 )
+
+// IsValidCountry returns true if c is one of the 5 supported jurisdictions.
+func IsValidCountry(c CountryCode) bool {
+	switch c {
+	case CountryIndia, CountryUSA, CountryAustralia, CountryEurope, CountryNewZealand:
+		return true
+	default:
+		return false
+	}
+}
 
 // MarketYear represents a single historical calendar year's joint nominal asset class
 // total returns, inflation rates, and starting valuation multiple.

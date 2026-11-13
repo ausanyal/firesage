@@ -60,35 +60,11 @@ func generatePathScenario(
 			}
 		}
 
-		isUS := country == data.CountryUSA
 		simPE := currPE
 		for y := 0; y < numYears; y++ {
 			var eqMean, eqVol, debtMean, debtVol, cashRate, goldMean, goldVol, cpiMean, cpiVol, medSpread float64
-			if isUS {
-				switch state {
-				case 0: // Expansion
-					eqMean, eqVol = 0.128, 0.135
-					debtMean, debtVol = 0.048, 0.065
-					cashRate = 0.035
-					goldMean, goldVol = 0.045, 0.13
-					cpiMean, cpiVol = 0.026, 0.011
-					medSpread = 0.016
-				case 1: // Crash / Recession
-					eqMean, eqVol = -0.215, 0.220
-					debtMean, debtVol = 0.095, 0.085 // Flight to Treasuries
-					cashRate = 0.018
-					goldMean, goldVol = 0.095, 0.16
-					cpiMean, cpiVol = 0.008, 0.018
-					medSpread = 0.018
-				default: // Stagflation
-					eqMean, eqVol = 0.015, 0.175
-					debtMean, debtVol = -0.025, 0.095 // Rising yields hurt bonds
-					cashRate = 0.068
-					goldMean, goldVol = 0.185, 0.21
-					cpiMean, cpiVol = 0.078, 0.024
-					medSpread = 0.024
-				}
-			} else {
+			switch country {
+			case data.CountryIndia:
 				// India regime parameters (higher nominal growth & structural CPI/medical inflation)
 				switch state {
 				case 0: // Expansion
@@ -112,6 +88,81 @@ func generatePathScenario(
 					goldMean, goldVol = 0.215, 0.18
 					cpiMean, cpiVol = 0.104, 0.022
 					medSpread = 0.048
+				}
+			case data.CountryEurope:
+				// Eurozone / Swiss developed market regime parameters (lower sovereign yields & benign CPI)
+				switch state {
+				case 0: // Expansion
+					eqMean, eqVol = 0.108, 0.145
+					debtMean, debtVol = 0.038, 0.058
+					cashRate = 0.026
+					goldMean, goldVol = 0.048, 0.13
+					cpiMean, cpiVol = 0.021, 0.010
+					medSpread = 0.015
+				case 1: // Crash / Sovereign Stress
+					eqMean, eqVol = -0.225, 0.225
+					debtMean, debtVol = 0.078, 0.075
+					cashRate = 0.012
+					goldMean, goldVol = 0.105, 0.15
+					cpiMean, cpiVol = 0.006, 0.015
+					medSpread = 0.016
+				default: // Energy / Inflation Shock (1980-82 / 2022 style)
+					eqMean, eqVol = 0.010, 0.175
+					debtMean, debtVol = -0.035, 0.088
+					cashRate = 0.045
+					goldMean, goldVol = 0.165, 0.19
+					cpiMean, cpiVol = 0.068, 0.022
+					medSpread = 0.020
+				}
+			case data.CountryAustralia, data.CountryNewZealand:
+				// Australia & New Zealand OECD commodity-backed / dividend-rich market regimes
+				switch state {
+				case 0: // Expansion
+					eqMean, eqVol = 0.118, 0.142
+					debtMean, debtVol = 0.052, 0.062
+					cashRate = 0.040
+					goldMean, goldVol = 0.055, 0.135
+					cpiMean, cpiVol = 0.027, 0.011
+					medSpread = 0.022
+				case 1: // Crash / Recession
+					eqMean, eqVol = -0.205, 0.215
+					debtMean, debtVol = 0.092, 0.078
+					cashRate = 0.022
+					goldMean, goldVol = 0.115, 0.16
+					cpiMean, cpiVol = 0.012, 0.016
+					medSpread = 0.022
+				default: // Stagflation
+					eqMean, eqVol = 0.022, 0.170
+					debtMean, debtVol = -0.020, 0.090
+					cashRate = 0.065
+					goldMean, goldVol = 0.180, 0.20
+					cpiMean, cpiVol = 0.074, 0.022
+					medSpread = 0.025
+				}
+			default:
+				// USA developed market regime parameters
+				switch state {
+				case 0: // Expansion
+					eqMean, eqVol = 0.128, 0.135
+					debtMean, debtVol = 0.048, 0.065
+					cashRate = 0.035
+					goldMean, goldVol = 0.045, 0.13
+					cpiMean, cpiVol = 0.026, 0.011
+					medSpread = 0.016
+				case 1: // Crash / Recession
+					eqMean, eqVol = -0.215, 0.220
+					debtMean, debtVol = 0.095, 0.085 // Flight to Treasuries
+					cashRate = 0.018
+					goldMean, goldVol = 0.095, 0.16
+					cpiMean, cpiVol = 0.008, 0.018
+					medSpread = 0.018
+				default: // Stagflation
+					eqMean, eqVol = 0.015, 0.175
+					debtMean, debtVol = -0.025, 0.095 // Rising yields hurt bonds
+					cashRate = 0.068
+					goldMean, goldVol = 0.185, 0.21
+					cpiMean, cpiVol = 0.078, 0.024
+					medSpread = 0.024
 				}
 			}
 

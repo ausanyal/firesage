@@ -1,38 +1,92 @@
-import React, { useState } from 'react';
-import type {
-  CityProfile,
-  LifeEvent,
-  PlanInput,
-  SimulationMode,
-  WithdrawalStrategy,
+import React, { useEffect, useState } from 'react';
+import {
+  SUPPORTED_COUNTRIES,
+  type CityProfile,
+  type CountryCode,
+  type LifeEvent,
+  type PlanInput,
+  type SimulationMode,
+  type WithdrawalStrategy,
 } from '../types';
-import { currencySymbol, formatMoneyCompact } from '../utils/format';
+import {
+  COUNTRY_META,
+  currencySymbol,
+  formatFXParity,
+  formatMoneyCompact,
+} from '../utils/format';
 import { BufferedNumberInput } from './BufferedNumberInput';
 
 interface InputControlRailProps {
   input: PlanInput;
   cities: CityProfile[];
+  fxRates?: Record<CountryCode, number>;
   onChange: (next: PlanInput) => void;
 }
 
-export const InputControlRail: React.FC<InputControlRailProps> = ({ input, cities, onChange }) => {
+function formatRetireCityOption(c: CityProfile): string {
+  if (c.country === 'US') {
+    return `${c.name} (${c.tier} • ${c.state_code} ${c.state_top_tax_rate_pct}% max tax)`;
+  }
+  if (c.country === 'EU') {
+    if (c.state_code === 'CH-ZH' || c.state_code === 'CH-TI') {
+      return `${c.name} (${c.tier} • 0% CGT + Wealth Tax)`;
+    }
+    if (c.state_code === 'IT-SOUTH' || c.state_code === 'GR') {
+      return `${c.name} (${c.tier} • 7% Flat Retiree Tax)`;
+    }
+    if (c.state_code === 'PT') {
+      return `${c.name} (${c.tier} • Portugal 19.6%–28% CGT)`;
+    }
+    return `${c.name} (${c.tier} • ${c.region} ${c.state_top_tax_rate_pct}% CGT)`;
+  }
+  if (c.country === 'AU') {
+    return `${c.name} (${c.tier} • ${c.region})`;
+  }
+  if (c.country === 'NZ') {
+    return `${c.name} (${c.tier} • ${c.region})`;
+  }
+  return `${c.name} (${c.tier} • ${c.region})`;
+}
+
+export const InputControlRail: React.FC<InputControlRailProps> = ({
+  input,
+  cities,
+  fxRates,
+  onChange,
+}) => {
+  const meta = COUNTRY_META[input.country] || COUNTRY_META.IN;
   const [tier2Open, setTier2Open] = useState(false);
   const [tier3Open, setTier3Open] = useState(false);
   const [newEventName, setNewEventName] = useState('');
   const [newEventAge, setNewEventAge] = useState(input.retirement_age + 4);
-  const [newEventAmt, setNewEventAmt] = useState(input.country === 'IN' ? -2_500_000 : -80_000);
+  const [newEventAmt, setNewEventAmt] = useState(meta.defaultMilestoneAmt);
 
-  const indiaCities = cities.filter((c) => c.country === 'IN');
-  const usCities = cities.filter((c) => c.country === 'US');
-  const countryCities = input.country === 'US' ? usCities : indiaCities;
+  useEffect(() => {
+    setNewEventAmt(COUNTRY_META[input.country]?.defaultMilestoneAmt ?? -80_000);
+  }, [input.country]);
+
+  const countryCities = cities.filter((c) => c.country === input.country);
   const currentCity = countryCities.find((c) => c.id === input.current_city_id) || countryCities[0];
   const retireCity = cities.find((c) => c.id === input.retirement_city_id) || currentCity;
   const isCrossBorder = Boolean(currentCity && retireCity && currentCity.country !== retireCity.country);
+  const retireMeta = retireCity ? COUNTRY_META[retireCity.country] : meta;
 
   const sym = currencySymbol(input.country);
-  const corpusStep = input.country === 'IN' ? 500_000 : 25_000;
-  const savingsStep = input.country === 'IN' ? 5_000 : 250;
-  const spendStep = input.country === 'IN' ? 5_000 : 250;
+  const { corpusStep, savingsStep, spendStep, unlockAge } = meta;
+
+  // Put active working country first in Retirement City dropdown, followed by all 4 cross-border jurisdictions
+  const orderedCountryGroups = [
+    input.country,
+    ...SUPPORTED_COUNTRIES.filter((code) => code !== input.country),
+  ].map((code) => {
+    const cm = COUNTRY_META[code];
+    const isHome = code === input.country;
+    return {
+      code,
+      label: `${cm.flag} ${cm.name} (${cm.symbol} ${cm.currencyCode})${isHome ? '' : ' — Cross-Border'}`,
+      list: cities.filter((c) => c.country === code),
+    };
+  });
 
   const liquidCorpus = Math.max(
     0,
@@ -68,7 +122,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
   const setLiquidCorpusTotal = (nextLiq: number) => {
     const prevLiq = input.buckets.taxable_equity + input.buckets.taxable_debt_cash;
     const eqRatio =
-      prevLiq > 1 ? input.buckets.taxable_equity / prevLiq : input.country === 'US' ? 0.83 : 0.77;
+      prevLiq > 1 ? input.buckets.taxable_equity / prevLiq : input.country === 'IN' ? 0.77 : 0.82;
     const taxable_equity = Math.round(nextLiq * eqRatio);
     const taxable_debt_cash = Math.max(0, Math.round(nextLiq - taxable_equity));
     updateBucketsAndCorpus({
@@ -93,8 +147,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
         tax_free_account,
         pension_locked,
       });
-    } else if (input.country === 'US') {
-      const tax_deferred_locked = Math.round(nextLocked * 0.73);
+    } else if (!meta.hasFreeBucket && !meta.hasNPSBucket) {
+      updateBucketsAndCorpus({
+        ...input.buckets,
+        tax_deferred_locked: Math.round(nextLocked),
+        tax_free_account: 0,
+        pension_locked: 0,
+      });
+    } else if (!meta.hasNPSBucket) {
+      const tax_deferred_locked = Math.round(nextLocked * 0.72);
       const tax_free_account = Math.max(0, Math.round(nextLocked - tax_deferred_locked));
       updateBucketsAndCorpus({
         ...input.buckets,
@@ -142,7 +203,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
       <form onSubmit={(e) => e.preventDefault()} className="fs-rail-form">
         {/* TIER 1: 60-SECOND CORE INPUTS */}
         <fieldset className="fs-fieldset">
-          <legend className="fs-legend">1. Core Timeline &amp; Geo-Arbitrage</legend>
+          <legend className="fs-legend">1. Core Timeline &amp; Global Geo-Arbitrage</legend>
 
           <div className="fs-field-row-2">
             <div className="fs-field">
@@ -222,9 +283,9 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
             </div>
           </div>
 
-          {/* City Selectors (7-8 options -> <select> per modern-web-guidance `forms`) */}
+          {/* City Selectors (33 global options -> <select> with <optgroup> per modern-web-guidance `forms`) */}
           <div className="fs-field">
-            <label htmlFor="fs-curr-city">Accumulation City (Working Years)</label>
+            <label htmlFor="fs-curr-city">Accumulation City ({meta.flag} Working Years)</label>
             <select
               id="fs-curr-city"
               name="current_city_id"
@@ -240,28 +301,18 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
           </div>
 
           <div className="fs-field">
-            <label htmlFor="fs-ret-city">Retirement City (FIRE Years — India or USA)</label>
+            <label htmlFor="fs-ret-city">Retirement City (FIRE Years — Global 33 Cities)</label>
             <select
               id="fs-ret-city"
               name="retirement_city_id"
               value={input.retirement_city_id}
               onChange={(e) => update({ retirement_city_id: e.target.value })}
             >
-              {(input.country === 'IN'
-                ? [
-                    { label: '🇮🇳 India Cities', list: indiaCities },
-                    { label: '🇺🇸 US Cities & States (Cross-Border)', list: usCities },
-                  ]
-                : [
-                    { label: '🇺🇸 US Cities & States', list: usCities },
-                    { label: '🇮🇳 India Cities (Cross-Border)', list: indiaCities },
-                  ]
-              ).map((grp) => (
-                <optgroup key={grp.label} label={grp.label}>
+              {orderedCountryGroups.map((grp) => (
+                <optgroup key={grp.code} label={grp.label}>
                   {grp.list.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} ({c.tier}
-                      {c.country === 'US' ? ` • ${c.state_code} ${c.state_top_tax_rate_pct}% max tax` : ''})
+                      {formatRetireCityOption(c)}
                     </option>
                   ))}
                 </optgroup>
@@ -272,12 +323,10 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
 
           {isCrossBorder && currentCity && retireCity && (
             <div className="fs-crossborder-note" role="status">
-              🌐 <strong>Cross-Border Move ({currentCity.country} → {retireCity.country}):</strong> Accumulation stays
-              in {sym} using {input.country === 'US' ? '401(k)/Roth' : 'EPF/PPF/NPS'} rules. At Age{' '}
-              {input.retirement_age}, expenses convert at <strong>1 USD = ₹85</strong> using{' '}
-              {retireCity.country === 'US'
-                ? `${retireCity.name} (${retireCity.state_code}) taxes & ACA/Medicare.`
-                : `${retireCity.name} India taxes & Family Floater healthcare.`}
+              🌐 <strong>Cross-Border Move ({meta.flag} {currentCity.country} → {retireMeta.flag} {retireCity.country}):</strong>{' '}
+              Portfolio stays in {sym} ({meta.lockedShort}). At Age {input.retirement_age}, expenses convert at{' '}
+              <strong>{formatFXParity(currentCity.country, retireCity.country, fxRates)}</strong> under{' '}
+              <strong>{retireCity.name}</strong> ({retireMeta.residencySummary}).
             </div>
           )}
 
@@ -308,9 +357,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
 
           <div className="fs-field-row-2">
             <div className="fs-field">
-              <label htmlFor="fs-liquid-corpus">
-                Liquid Corpus ({input.country === 'IN' ? 'MF / Debt / FD' : 'Brokerage / Cash'})
-              </label>
+              <label htmlFor="fs-liquid-corpus">Liquid Corpus ({meta.liquidShort})</label>
               <BufferedNumberInput
                 id="fs-liquid-corpus"
                 name="liquid_corpus"
@@ -319,12 +366,14 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 value={liquidCorpus}
                 onCommit={setLiquidCorpusTotal}
               />
-              <span className="fs-hint">{formatMoneyCompact(liquidCorpus, input.country)} spendable pre-60</span>
+              <span className="fs-hint">
+                {formatMoneyCompact(liquidCorpus, input.country)} spendable pre-{unlockAge}
+              </span>
             </div>
 
             <div className="fs-field">
               <label htmlFor="fs-locked-corpus">
-                Age-60 Retirement Funds ({input.country === 'IN' ? 'EPF / PPF / NPS' : '401k / IRA / Roth'})
+                Age-{unlockAge} Funds ({meta.lockedShort})
               </label>
               <BufferedNumberInput
                 id="fs-locked-corpus"
@@ -334,13 +383,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 value={lockedCorpus}
                 onCommit={setLockedCorpusTotal}
               />
-              <span className="fs-hint">{formatMoneyCompact(lockedCorpus, input.country)} unlocks ~Age 60</span>
+              <span className="fs-hint">
+                {formatMoneyCompact(lockedCorpus, input.country)} unlocks Age {unlockAge}
+              </span>
             </div>
           </div>
 
           <div className="fs-field-row-2">
             <div className="fs-field">
-              <label htmlFor="fs-savings">Monthly Liquid SIP / Save</label>
+              <label htmlFor="fs-savings">Monthly Liquid Invest / Save</label>
               <BufferedNumberInput
                 id="fs-savings"
                 name="monthly_savings"
@@ -353,9 +404,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
             </div>
 
             <div className="fs-field">
-              <label htmlFor="fs-locked-savings">
-                Monthly {input.country === 'IN' ? 'EPF / VPF / NPS' : '401(k) / Roth'}
-              </label>
+              <label htmlFor="fs-locked-savings">Monthly {meta.monthlyLockedLabel}</label>
               <BufferedNumberInput
                 id="fs-locked-savings"
                 name="monthly_locked_savings"
@@ -364,7 +413,9 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 value={lockedSavings}
                 onCommit={(v) => update({ monthly_locked_savings: v })}
               />
-              <span className="fs-hint">{formatMoneyCompact(lockedSavings, input.country)}/mo age-60</span>
+              <span className="fs-hint">
+                {formatMoneyCompact(lockedSavings, input.country)}/mo age-{unlockAge}
+              </span>
             </div>
           </div>
 
@@ -380,7 +431,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 value={Math.round(input.annual_savings_step_up * 100)}
                 onCommit={(v) => update({ annual_savings_step_up: v / 100 })}
               />
-              <span className="fs-hint">Career SIP growth/yr</span>
+              <span className="fs-hint">Career save growth/yr</span>
             </div>
             <div className="fs-field">
               <span className="fs-group-label">Combined Monthly Save</span>
@@ -403,7 +454,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
               id="fs-spend"
               name="desired_monthly_spend"
               step={spendStep}
-              min={input.country === 'IN' ? 5000 : 500}
+              min={meta.minSpend}
               value={Math.round(input.desired_monthly_spend)}
               onCommit={(v) => update({ desired_monthly_spend: v })}
             />
@@ -420,7 +471,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                   <button
                     key={label}
                     type="button"
-                    className={`fs-preset-btn ${Math.abs(input.desired_monthly_spend - amt) < 500 ? 'active' : ''}`}
+                    className={`fs-preset-btn ${Math.abs(input.desired_monthly_spend - amt) < meta.spendStep / 2 ? 'active' : ''}`}
                     onClick={() => applyLifestylePreset(amt)}
                   >
                     <span>{label}</span>
@@ -477,7 +528,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
             aria-controls="fs-tier2-panel"
             onClick={() => setTier2Open((o) => !o)}
           >
-            <span>2B. Tax Buckets, {input.country === 'US' ? 'Social Security' : 'NPS/Pensions'} &amp; Life Events</span>
+            <span>2B. Tax Buckets, {meta.pensionShort} &amp; Life Events</span>
             <span>{tier2Open ? '▾' : '▸'}</span>
           </button>
 
@@ -491,11 +542,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                   checked={input.enable_tax_optimization}
                   onChange={(e) => update({ enable_tax_optimization: e.target.checked })}
                 />
-                <label htmlFor="fs-tax-opt">
-                  {input.country === 'US'
-                    ? 'Auto Roth Conversion Ladder (capped below 2026 400% FPL ACA Cliff)'
-                    : 'Auto ₹1.25L/yr Sec 112A Tax-Free Equity LTCG Harvesting'}
-                </label>
+                <label htmlFor="fs-tax-opt">{meta.taxOptLabel}</label>
               </div>
 
               <div className="fs-checkbox-row">
@@ -516,9 +563,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
               {input.buckets.use_granular && (
                 <div className="fs-subgrid">
                   <div className="fs-field">
-                    <label htmlFor="fs-b-eq">
-                      {input.country === 'IN' ? 'Taxable Equity/Arb MF' : 'Taxable Brokerage'}
-                    </label>
+                    <label htmlFor="fs-b-eq">{meta.bucketEqLabel}</label>
                     <BufferedNumberInput
                       id="fs-b-eq"
                       name="bucket_taxable_eq"
@@ -531,9 +576,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     />
                   </div>
                   <div className="fs-field">
-                    <label htmlFor="fs-b-debt">
-                      {input.country === 'IN' ? 'Liquid / Debt MF / FD' : 'Cash / T-Bills'}
-                    </label>
+                    <label htmlFor="fs-b-debt">{meta.bucketDebtLabel}</label>
                     <BufferedNumberInput
                       id="fs-b-debt"
                       name="bucket_debt"
@@ -546,9 +589,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     />
                   </div>
                   <div className="fs-field">
-                    <label htmlFor="fs-b-def">
-                      {input.country === 'IN' ? 'EPF / VPF Balance' : 'Traditional 401(k) / IRA'}
-                    </label>
+                    <label htmlFor="fs-b-def">{meta.bucketDefLabel}</label>
                     <BufferedNumberInput
                       id="fs-b-def"
                       name="bucket_def"
@@ -560,22 +601,22 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                       }
                     />
                   </div>
-                  <div className="fs-field">
-                    <label htmlFor="fs-b-free">
-                      {input.country === 'IN' ? 'PPF (EEE Tax-Free)' : 'Roth IRA + HSA'}
-                    </label>
-                    <BufferedNumberInput
-                      id="fs-b-free"
-                      name="bucket_free"
-                      min={0}
-                      step={corpusStep / 2}
-                      value={Math.round(input.buckets.tax_free_account)}
-                      onCommit={(v) =>
-                        updateBucketsAndCorpus({ ...input.buckets, tax_free_account: v })
-                      }
-                    />
-                  </div>
-                  {input.country === 'IN' && (
+                  {meta.hasFreeBucket && (
+                    <div className="fs-field">
+                      <label htmlFor="fs-b-free">{meta.bucketFreeLabel}</label>
+                      <BufferedNumberInput
+                        id="fs-b-free"
+                        name="bucket_free"
+                        min={0}
+                        step={corpusStep / 2}
+                        value={Math.round(input.buckets.tax_free_account)}
+                        onCommit={(v) =>
+                          updateBucketsAndCorpus({ ...input.buckets, tax_free_account: v })
+                        }
+                      />
+                    </div>
+                  )}
+                  {meta.hasNPSBucket && (
                     <div className="fs-field">
                       <label htmlFor="fs-b-nps">NPS Tier-I (Locked to 60)</label>
                       <BufferedNumberInput
@@ -595,9 +636,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
 
               <div className="fs-field-row-2">
                 <div className="fs-field">
-                  <label htmlFor="fs-ss-amt">
-                    {input.country === 'US' ? 'Monthly Social Security' : 'Monthly Pension/Rental'}
-                  </label>
+                  <label htmlFor="fs-ss-amt">{meta.pensionLabel}</label>
                   <BufferedNumberInput
                     id="fs-ss-amt"
                     name="social_security_monthly_real"
@@ -606,6 +645,9 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     value={Math.round(input.social_security_monthly_real)}
                     onCommit={(v) => update({ social_security_monthly_real: v })}
                   />
+                  {input.country === 'AU' && (
+                    <span className="fs-hint">Centrelink Age Pension @ 67 is auto-modeled via Assets Test!</span>
+                  )}
                 </div>
                 <div className="fs-field">
                   <label htmlFor="fs-ss-age">Start Age</label>

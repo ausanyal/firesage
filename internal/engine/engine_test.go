@@ -185,3 +185,79 @@ func TestMonthlyLockedRetirementFundContributions(t *testing.T) {
 			resLocked.SuccessRate, withoutLocked.SuccessRate)
 	}
 }
+
+func TestGlobalJurisdictionsAustraliaEuropeNZAndNewIndianCities(t *testing.T) {
+	// 1. Australia: Sydney -> Melbourne & Gold Coast + Superannuation Age 60 unlock + Age 67 Centrelink Age Pension
+	auPlan := DefaultCountryTemplate(data.CountryAustralia)
+	auPlan.NumPaths = 800
+	auPlan.Seed = 101
+	resAU := RunFullAnalysis(auPlan)
+	if resAU.GeoArbitrage.MoveSuccessRate <= resAU.GeoArbitrage.StaySuccessRate {
+		t.Fatalf("expected AU Sydney -> Gold Coast survival (%.1f%%) > Sydney stay (%.1f%%)",
+			resAU.GeoArbitrage.MoveSuccessRate, resAU.GeoArbitrage.StaySuccessRate)
+	}
+	// Check Melbourne city lookup & simulation
+	auMelb := auPlan
+	auMelb.RetirementCityID = "au-melbourne"
+	resMelb := RunFullAnalysis(auMelb)
+	if resMelb.SuccessRate <= 0 || len(resMelb.CrisisReplays) != 4 {
+		t.Fatalf("expected valid AU Melbourne analysis & 4 AU historical crisis replays, got %.1f%% / %d",
+			resMelb.SuccessRate, len(resMelb.CrisisReplays))
+	}
+
+	// 2. Europe & Switzerland: Zurich Suburbs -> Algarve (Portugal) & Southern Italy (7% Flat Tax)
+	euPlan := DefaultCountryTemplate(data.CountryEurope)
+	euPlan.NumPaths = 800
+	euPlan.Seed = 202
+	resEU := RunFullAnalysis(euPlan)
+	if resEU.GeoArbitrage.MoveSuccessRate <= resEU.GeoArbitrage.StaySuccessRate {
+		t.Fatalf("expected Zurich Suburbs -> Algarve survival (%.1f%%) > Zurich stay (%.1f%%)",
+			resEU.GeoArbitrage.MoveSuccessRate, resEU.GeoArbitrage.StaySuccessRate)
+	}
+	if resEU.GeoArbitrage.CorpusSavedReal < 250_000 {
+		t.Fatalf("expected huge corpus savings moving Zurich Suburbs -> Algarve, got €%.0f", resEU.GeoArbitrage.CorpusSavedReal)
+	}
+
+	// Lugano -> Southern Italy (Puglia/Sicily)
+	luganoToItaly := euPlan
+	luganoToItaly.CurrentCityID = "eu-lugano"
+	luganoToItaly.RetirementCityID = "eu-south-italy"
+	resLugIt := RunFullAnalysis(luganoToItaly)
+	if resLugIt.GeoArbitrage.MoveSuccessRate <= resLugIt.GeoArbitrage.StaySuccessRate {
+		t.Fatalf("expected Lugano -> Southern Italy survival (%.1f%%) > Lugano stay (%.1f%%)",
+			resLugIt.GeoArbitrage.MoveSuccessRate, resLugIt.GeoArbitrage.StaySuccessRate)
+	}
+
+	// 3. New Zealand: Auckland -> Tauranga/Nelson & KiwiSaver Age 65 unlock check
+	nzPlan := DefaultCountryTemplate(data.CountryNewZealand)
+	nzPlan.NumPaths = 800
+	nzPlan.Seed = 303
+	resNZ := RunFullAnalysis(nzPlan)
+	if resNZ.SuccessRate <= 0 {
+		t.Fatalf("expected positive NZ FIRE success rate, got %.1f%%", resNZ.SuccessRate)
+	}
+	// Verify KiwiSaver stays locked at age 62 (<65) and unlocks at age 65!
+	idx62 := 62 - nzPlan.CurrentAge
+	idx65 := 65 - nzPlan.CurrentAge
+	if resNZ.YearlyBands[idx62].LockedRealP50 <= 0 {
+		t.Fatalf("expected NZ KiwiSaver to remain locked at age 62, got LockedRealP50=%.0f", resNZ.YearlyBands[idx62].LockedRealP50)
+	}
+	if resNZ.YearlyBands[idx65].LockedRealP50 != 0 {
+		t.Fatalf("expected NZ KiwiSaver to unlock completely at age 65, got LockedRealP50=%.0f", resNZ.YearlyBands[idx65].LockedRealP50)
+	}
+
+	// 4. New Indian Cities: Dehradun, Kodaikanal, Kochi (Cochin) + Cross-Border India -> Portugal
+	for _, cityID := range []string{"in-dehradun", "in-kodaikanal", "in-kochi"} {
+		inCityPlan := DefaultCountryTemplate(data.CountryIndia)
+		inCityPlan.RetirementCityID = cityID
+		inCityPlan.NumPaths = 400
+		resInCity := RunFullAnalysis(inCityPlan)
+		if resInCity.GeoArbitrage.MoveSuccessRate <= resInCity.GeoArbitrage.StaySuccessRate {
+			t.Fatalf("expected Bengaluru -> %s survival (%.1f%%) > Bengaluru stay (%.1f%%)",
+				cityID, resInCity.GeoArbitrage.MoveSuccessRate, resInCity.GeoArbitrage.StaySuccessRate)
+		}
+	}
+
+	t.Logf("🌏 Global Check: AU=%.1f%%, EU(ZH->PT)=%.1f%%, EU(Lugano->Puglia)=%.1f%%, NZ=%.1f%%",
+		resAU.SuccessRate, resEU.SuccessRate, resLugIt.SuccessRate, resNZ.SuccessRate)
+}

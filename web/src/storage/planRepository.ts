@@ -1,4 +1,4 @@
-import type { PlanInput, SavedPlanRecord } from '../types';
+import { isValidCountry, type PlanInput, type SavedPlanRecord } from '../types';
 
 const DB_NAME = 'firesage_local_db';
 const DB_VERSION = 1;
@@ -77,7 +77,7 @@ class IndexedDBPlanRepository implements ClientPlanRepository {
       if (window.location.hash.startsWith('#plan=')) {
         const encoded = decodeURIComponent(window.location.hash.slice(6));
         const parsed = JSON.parse(atob(encoded)) as PlanInput;
-        if (parsed && (parsed.country === 'IN' || parsed.country === 'US')) {
+        if (parsed && isValidCountry(parsed.country)) {
           return parsed;
         }
       }

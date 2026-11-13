@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { CountryCode, SampleTrajectory, YearBand } from '../types';
-import { formatMoneyCompact } from '../utils/format';
+import { currencySymbol, formatMoneyCompact } from '../utils/format';
 
 interface WealthConeChartProps {
   bands: YearBand[];
@@ -53,7 +53,7 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
   }, []);
 
   const pad = useMemo(
-    () => ({ top: 26, right: size.width >= 580 ? 158 : 112, bottom: 38, left: 74 }),
+    () => ({ top: 26, right: size.width >= 580 ? 170 : 118, bottom: 38, left: 78 }),
     [size.width],
   );
 
@@ -518,7 +518,7 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
                 onChange={() => onChangeValueBasis('real')}
                 className="visually-hidden"
               />
-              Today&apos;s {country === 'IN' ? '₹' : '$'} (Real)
+              Today&apos;s {currencySymbol(country)} (Real)
             </label>
             <label className={`fs-seg-option ${valueBasis === 'nominal' ? 'active' : ''}`}>
               <input
@@ -529,7 +529,7 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
                 onChange={() => onChangeValueBasis('nominal')}
                 className="visually-hidden"
               />
-              Future {country === 'IN' ? '₹' : '$'} (Nominal)
+              Future {currencySymbol(country)} (Nominal)
             </label>
           </div>
         </div>
@@ -540,14 +540,14 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
         <div className="fs-basis-explainer">
           {valueBasis === 'real' ? (
             <span>
-              <strong>Showing Today&apos;s {country === 'IN' ? '₹' : '$'} (Inflation-Adjusted / Real):</strong>{' '}
-              Purchasing power expressed in today&apos;s money — so ₹/$ values stay directly comparable to what your
-              salary and expenses buy today.
+              <strong>Showing Today&apos;s {currencySymbol(country)} (Inflation-Adjusted / Real):</strong>{' '}
+              Purchasing power expressed in today&apos;s money — so {currencySymbol(country)} values stay directly
+              comparable to what your salary and expenses buy today.
             </span>
           ) : (
             <span>
-              <strong>Showing Future {country === 'IN' ? '₹' : '$'} (Nominal):</strong> Raw future rupee/dollar balances
-              printed on statements, inflated by cumulative CPI (larger numbers, lower purchasing power per unit).
+              <strong>Showing Future {currencySymbol(country)} (Nominal):</strong> Raw future account balances printed
+              on statements, inflated by cumulative CPI (larger numbers, lower purchasing power per unit).
             </span>
           )}
         </div>
