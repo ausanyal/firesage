@@ -33,8 +33,12 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	if in.CurrentAge > 85 {
 		in.CurrentAge = 85
 	}
-	if in.RetirementAge <= in.CurrentAge {
-		in.RetirementAge = minInt(in.CurrentAge+12, StatutoryUnlockAge(in.Country))
+	if in.RetirementAge < in.CurrentAge {
+		if in.RetirementAge <= 0 {
+			in.RetirementAge = maxInt(in.CurrentAge, minInt(in.CurrentAge+12, StatutoryUnlockAge(in.Country)))
+		} else {
+			in.RetirementAge = in.CurrentAge
+		}
 	}
 	if in.HorizonAge <= in.RetirementAge+2 {
 		in.HorizonAge = maxInt(92, in.RetirementAge+15)
@@ -48,7 +52,7 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	if in.RetirementCityID == "" {
 		in.RetirementCityID = currCity.ID
 	} else {
-		// Allow any-to-any global cross-country retirement (e.g., India/US/AU/EU/NZ -> any of 33 cities).
+		// Allow any-to-any global cross-country retirement (e.g., India/US/AU/EU/NZ -> any of 34 cities).
 		retCity := data.GetCity(in.RetirementCityID, currCity.Country)
 		in.RetirementCityID = retCity.ID
 	}
@@ -289,18 +293,23 @@ func simulateFastProbe(
 	return out.survived, out.corpusAtFireReal
 }
 
-func pregenerateProbeScenarios(in PlanInput, nProbe int) [][]data.MarketYear {
+func pregenerateProbeScenarios(in PlanInput, maxProbe int) [][]data.MarketYear {
 	history := data.HistoryByCountry(in.Country)
 	mode := in.Mode
+	nTotal := in.NumPaths
 	if mode == ModeHistorical {
-		mode = ModeBootstrap
-		nProbe = minInt(nProbe, len(history))
+		nTotal = len(history)
+	}
+	nProbe := minInt(nTotal, maxProbe)
+	if nProbe < 1 {
+		nProbe = 1
 	}
 	numYears := in.HorizonAge - in.CurrentAge + 1
 	scenarios := make([][]data.MarketYear, nProbe)
-	for p := 0; p < nProbe; p++ {
-		rng := rand.New(rand.NewPCG(in.Seed+uint64(p)*7919+31, uint64(p)*104729+17))
-		scenarios[p] = generatePathScenario(mode, in.Country, history, numYears, p, rng)
+	for k := 0; k < nProbe; k++ {
+		p := (k * nTotal) / nProbe
+		rng := rand.New(rand.NewPCG(in.Seed+uint64(p)*7919, uint64(p)*104729+17))
+		scenarios[k] = generatePathScenario(mode, in.Country, history, numYears, p, rng)
 	}
 	return scenarios
 }
@@ -326,6 +335,10 @@ func probeSuccessAndMedianFire(in PlanInput, scenarios [][]data.MarketYear) (rat
 }
 
 func probeSuccessOnly(in PlanInput, scenarios [][]data.MarketYear) float64 {
+	return probeSuccessWithInitMed(in, scenarios, nil)
+}
+
+func probeSuccessWithInitMed(in PlanInput, scenarios [][]data.MarketYear, initMedRatios []float64) float64 {
 	n := len(scenarios)
 	if n == 0 {
 		return 0
@@ -334,7 +347,11 @@ func probeSuccessOnly(in PlanInput, scenarios [][]data.MarketYear) float64 {
 	retCity := data.GetCity(in.RetirementCityID, in.Country)
 	surv := 0
 	for i := 0; i < n; i++ {
-		ok, _ := simulateFastProbe(in, currCity, retCity, scenarios[i])
+		p := in
+		if i < len(initMedRatios) && initMedRatios[i] > 0 {
+			p.initMedIndex = initMedRatios[i]
+		}
+		ok, _ := simulateFastProbe(p, currCity, retCity, scenarios[i])
 		if ok {
 			surv++
 		}
@@ -371,6 +388,9 @@ func simulatePathInternal(
 
 	cpiIndex := 1.0
 	medIndex := 1.0
+	if in.initMedIndex > 0 {
+		medIndex = in.initMedIndex
+	}
 	feeDrag := in.ExpenseRatioBps / 10_000.0
 	birthYear := baseSimulationYear - in.CurrentAge
 	_, medianPE := data.CurrentValuation(in.Country)
@@ -483,11 +503,10 @@ func simulatePathInternal(
 			defensiveBlendRet = (debtW*debtRet+cashW*cashRet)/(debtW+cashW) - feeDrag*0.5
 		}
 
-		// Apply investment returns for year y (skipping t=0 pre-existing snapshot? No, year y represents age -> age+1)
-		if y > 0 {
-			cpiIndex *= (1.0 + cpi)
-			medIndex *= (1.0 + medCPI)
-		}
+		// Compound headline and medical inflation over year y (age -> age+1)
+		cpiIndex *= (1.0 + cpi)
+		medIndex *= (1.0 + medCPI)
+		yearsElapsed := in.preRetireYears + y + 1
 
 		// Track first 5 years of retirement returns for SRR Heatmap
 		if isRetired && ret5Count < 5 {
@@ -604,10 +623,9 @@ func simulatePathInternal(
 		if !isRetired {
 			// ===================== ACCUMULATION PHASE =====================
 			yearsWorked := age - in.CurrentAge
-			stepUpMult := math.Pow(1.0+in.AnnualSavingsStepUp, float64(yearsWorked))
-			savMult := cpiIndex
-			if in.AnnualSavingsStepUp > 0 {
-				savMult = stepUpMult
+			savMult := math.Pow(1.0+in.AnnualSavingsStepUp, float64(yearsWorked))
+			if in.stopSavingsAge > 0 && age >= in.stopSavingsAge {
+				savMult = 0
 			}
 
 			if in.MonthlyLockedSavings > 0 || in.Buckets.UseGranular {
@@ -774,11 +792,10 @@ func simulatePathInternal(
 			// Australia automatic means-tested Centrelink Age Pension from Age 67 (for AU citizens/residents retiring in AU)
 			if in.Country == data.CountryAustralia && activeCity.Country == data.CountryAustralia && age >= 67 {
 				assessableAUD := data.ConvertCurrency(totalStartNom, in.Country, data.CountryAustralia)
-				auPensionAUD := tax.AustraliaAgePensionAnnual(age, in.IsCouple, assessableAUD, cpiIndex)
+				otherIncomeAUD := data.ConvertCurrency(guaranteedInNom+milestoneTaxableInNom, in.Country, data.CountryAustralia)
+				auPensionAUD := tax.AustraliaAgePensionWithIncomeTest(age, in.IsCouple, assessableAUD, otherIncomeAUD, cpiIndex)
 				auPensionNom := data.ConvertCurrency(auPensionAUD, data.CountryAustralia, in.Country)
-				if auPensionNom > guaranteedInNom {
-					guaranteedInNom = auPensionNom
-				}
+				guaranteedInNom += auPensionNom
 			}
 
 			// 3. Country-specific Healthcare, RMD, Tax-Smart Drawdown & Unlock Sequencing
@@ -796,7 +813,7 @@ func simulatePathInternal(
 					ordinaryIncome += mandatoryRMD
 				}
 
-				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex)
+				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex, yearsElapsed)
 				grossNeed := coreLivingOutNom + estHealth + milestoneOutNom - guaranteedInNom - milestoneInNom
 				if grossNeed < 0 {
 					surplus := -grossNeed
@@ -868,7 +885,12 @@ func simulatePathInternal(
 				}
 
 				if in.EnableTaxOptimization && taxDeferred > 0 && age < 73 {
-					magiCeiling := tax.OptimalRothConversionCeiling(age, in.IsCouple, cpiIndex)
+					convAge := age
+					if activeCity.Country != data.CountryUSA && convAge < 65 {
+						// Non-US residents do not buy US ACA Marketplace coverage; fill full 12% federal bracket
+						convAge = 65
+					}
+					magiCeiling := tax.OptimalRothConversionCeiling(convAge, in.IsCouple, cpiIndex)
 					currentMAGI := ordinaryIncome + realizedLTCG
 					room := magiCeiling - currentMAGI
 					if room > 1_000*cpiIndex {
@@ -881,7 +903,7 @@ func simulatePathInternal(
 				}
 
 				finalMAGI := ordinaryIncome + realizedLTCG
-				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
+				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex, yearsElapsed)
 				extraHealth := math.Max(0, healthcareOutNom-estHealth)
 				assessableNW := taxableEq + taxableDebt + rothSeasoned
 				if age >= 60 {
@@ -928,7 +950,7 @@ func simulatePathInternal(
 				ordinaryIncome := milestoneTaxableInNom + guaranteedInNom
 				realizedEqGain := 0.0
 
-				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex)
+				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex, yearsElapsed)
 				grossNeed := coreLivingOutNom + estHealth + milestoneOutNom - guaranteedInNom - milestoneInNom
 				if grossNeed < 0 {
 					surplus := -grossNeed
@@ -1045,7 +1067,7 @@ func simulatePathInternal(
 				healthcareOutNom = estHealth
 				if activeCity.Country == data.CountryUSA {
 					finalMAGI := ordinaryIncome + realizedEqGain
-					healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
+					healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex, yearsElapsed)
 					extraHealth = math.Max(0, healthcareOutNom-estHealth)
 				}
 
@@ -1079,7 +1101,7 @@ func simulatePathInternal(
 			default:
 				// ===================== INDIA ACCUMULATION ACCOUNTS DECUMULATION =====================
 				estMAGI := milestoneTaxableInNom + guaranteedInNom
-				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, estMAGI, cpiIndex, medIndex)
+				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, estMAGI, cpiIndex, medIndex, yearsElapsed)
 				slabIncome := milestoneTaxableInNom + guaranteedInNom
 
 				grossNeed := coreLivingOutNom + healthcareOutNom + milestoneOutNom - guaranteedInNom - milestoneInNom
@@ -1162,25 +1184,26 @@ func simulatePathInternal(
 					in.Country, currCity, activeCity, in.IsCouple, in.EnableTaxOptimization,
 					slabIncome, realizedEqGain, assessableNW, taxableEq, yearsInRet, age, cpiIndex,
 				)
+				extraHealth := 0.0
 				if activeCity.Country == data.CountryUSA {
 					finalMAGI := slabIncome + realizedEqGain
-					finalHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
-					extraHealth := math.Max(0, finalHealth-healthcareOutNom)
+					finalHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex, yearsElapsed)
+					extraHealth = math.Max(0, finalHealth-healthcareOutNom)
 					healthcareOutNom = finalHealth
-					taxesOutNom += extraHealth
 				}
 
-				if taxesOutNom > 0 {
-					paid, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, taxesOutNom)
+				bill := taxesOutNom + extraHealth
+				if bill > 0 {
+					paid, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, bill)
 					portfolioDrawNom += paid
-					remTax := taxesOutNom - paid
-					if remTax > 0 && taxDeferred > 0 {
-						p := math.Min(remTax, taxDeferred)
+					remBill := bill - paid
+					if remBill > 0 && taxDeferred > 0 {
+						p := math.Min(remBill, taxDeferred)
 						taxDeferred -= p
 						portfolioDrawNom += p
-						remTax -= p
+						remBill -= p
 					}
-					remNeed += remTax
+					remNeed += remBill
 				}
 
 				if remNeed > 1.0 && totalRemaining(taxableEq, taxableDebt, taxDeferred, rothSeasoned, rothGrowthLocked, rothRungs, pensionLocked) <= 1.0 {
@@ -1392,13 +1415,17 @@ func maxInt(a, b int) int {
 }
 
 // EffectiveCOLScale computes the retirement spending multiplier when relocating from
-// currCity to retCity, handling both intra-country cost-of-living index ratios and
-// cross-country purchasing-power ratios using calibrated Standard presets + FX parity.
+// currCity to retCity, handling both intra-country weighted (65% non-housing COL + 35% housing)
+// index ratios and cross-country purchasing-power ratios using calibrated Standard presets + FX parity.
 func EffectiveCOLScale(currCity, retCity data.CityProfile) float64 {
 	if retCity.ID == currCity.ID {
 		return 1.0
 	}
 	if currCity.Country == retCity.Country {
+		if currCity.CostOfLivingIndex > 0 && currCity.HousingCostIndex > 0 && retCity.HousingCostIndex > 0 {
+			return 0.65*(retCity.CostOfLivingIndex/currCity.CostOfLivingIndex) +
+				0.35*(retCity.HousingCostIndex/currCity.HousingCostIndex)
+		}
 		if currCity.CostOfLivingIndex > 0 {
 			return retCity.CostOfLivingIndex / currCity.CostOfLivingIndex
 		}
@@ -1411,6 +1438,25 @@ func EffectiveCOLScale(currCity, retCity data.CityProfile) float64 {
 	return 1.0
 }
 
+// realMedicalExcessRate returns the calibrated long-run annual excess medical cost inflation
+// above headline CPI for the destination retirement jurisdiction.
+func realMedicalExcessRate(country data.CountryCode) float64 {
+	switch country {
+	case data.CountryIndia:
+		return 0.042 // ~10.4–11.5% medical inflation vs ~6.2% headline CPI
+	case data.CountryUSA:
+		return 0.016 // ~4.6% ACA/Medicare/OOP trend vs ~3.0% headline CPI
+	case data.CountryAustralia:
+		return 0.015 // ~4.3% PHI/specialist gap trend vs ~2.8% headline CPI
+	case data.CountryEurope:
+		return 0.012 // ~3.4% Swiss LAMal / EU mutuelle trend vs ~2.2% headline CPI
+	case data.CountryNewZealand:
+		return 0.018 // ~4.6% Southern Cross medical trend vs ~2.8% headline CPI
+	default:
+		return 0.018
+	}
+}
+
 func computeResidencyHealthcareNom(
 	acctCountry data.CountryCode,
 	retCity data.CityProfile,
@@ -1418,23 +1464,34 @@ func computeResidencyHealthcareNom(
 	isCouple bool,
 	magiAcctCurrency float64,
 	cpiIndex, medIndex float64,
+	yearsElapsed int,
 ) float64 {
+	effMedIndex := medIndex
+	if acctCountry != retCity.Country {
+		// Prevent applying the origin country's nominal medical inflation excess (e.g., India ~11.5%/yr)
+		// to a foreign retirement destination's healthcare system (e.g., Swiss LAMal or US Medicare).
+		if yearsElapsed < 0 {
+			yearsElapsed = 0
+		}
+		effMedIndex = cpiIndex * math.Pow(1.0+realMedicalExcessRate(retCity.Country), float64(yearsElapsed))
+	}
+
 	switch retCity.Country {
 	case data.CountryUSA:
 		magiUSD := data.ConvertCurrency(magiAcctCurrency, acctCountry, data.CountryUSA)
-		hcUSD := tax.USHealthcareAnnual(age, isCouple, magiUSD, retCity, cpiIndex, medIndex)
+		hcUSD := tax.USHealthcareAnnual(age, isCouple, magiUSD, retCity, cpiIndex, effMedIndex)
 		return data.ConvertCurrency(hcUSD, data.CountryUSA, acctCountry)
 	case data.CountryAustralia:
-		hcAUD := tax.AustraliaHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		hcAUD := tax.AustraliaHealthcareAnnual(age, isCouple, retCity, cpiIndex, effMedIndex)
 		return data.ConvertCurrency(hcAUD, data.CountryAustralia, acctCountry)
 	case data.CountryEurope:
-		hcEUR := tax.EuropeHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		hcEUR := tax.EuropeHealthcareAnnual(age, isCouple, retCity, cpiIndex, effMedIndex)
 		return data.ConvertCurrency(hcEUR, data.CountryEurope, acctCountry)
 	case data.CountryNewZealand:
-		hcNZD := tax.NZHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		hcNZD := tax.NZHealthcareAnnual(age, isCouple, retCity, cpiIndex, effMedIndex)
 		return data.ConvertCurrency(hcNZD, data.CountryNewZealand, acctCountry)
 	default:
-		hcINR := tax.IndiaHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+		hcINR := tax.IndiaHealthcareAnnual(age, isCouple, retCity, cpiIndex, effMedIndex)
 		return data.ConvertCurrency(hcINR, data.CountryIndia, acctCountry)
 	}
 }

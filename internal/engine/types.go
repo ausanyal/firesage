@@ -96,6 +96,11 @@ type PlanInput struct {
 	Mode                      SimulationMode     `json:"mode"`
 	NumPaths                  int                `json:"num_paths"`
 	Seed                      uint64             `json:"seed"`
+
+	// Internal solver hooks (unexported, omitted from JSON)
+	stopSavingsAge int
+	initMedIndex   float64
+	preRetireYears int
 }
 
 // YearBand captures cross-sectional percentiles & cash-flow medians at a specific age.

@@ -102,9 +102,18 @@ func AustraliaIncomeTax(ordinaryIncome, realizedLTCG float64, isCouple, enableFr
 }
 
 // AustraliaAgePensionAnnual computes the means-tested Services Australia Age Pension (from Age 67)
-// for a homeowner household, applying the statutory Centrelink Assets Test taper
-// (A$3.00/fortnight = A$78.00/year reduction per A$1,000 of assessable financial assets above threshold).
+// for a homeowner household with zero non-portfolio private pension income, applying the stricter
+// of the statutory Centrelink Assets Test and Deeming Income Test.
 func AustraliaAgePensionAnnual(age int, isCouple bool, assessableAssets, cpiIndex float64) float64 {
+	return AustraliaAgePensionWithIncomeTest(age, isCouple, assessableAssets, 0, cpiIndex)
+}
+
+// AustraliaAgePensionWithIncomeTest computes the means-tested Services Australia Age Pension (from Age 67)
+// for a homeowner household, taking the statutory minimum of:
+//  1. Assets Test: A$3.00/fortnight (A$78/yr) reduction per A$1,000 above homeowner threshold
+//  2. Income Test: 50c per dollar reduction on total assessable income (statutory deemed financial
+//     income + otherAnnualIncome) above the Centrelink income free area.
+func AustraliaAgePensionWithIncomeTest(age int, isCouple bool, assessableAssets, otherAnnualIncome, cpiIndex float64) float64 {
 	if age < 67 {
 		return 0
 	}
@@ -114,22 +123,41 @@ func AustraliaAgePensionAnnual(age int, isCouple bool, assessableAssets, cpiInde
 	if assessableAssets < 0 {
 		assessableAssets = 0
 	}
+	if otherAnnualIncome < 0 {
+		otherAnnualIncome = 0
+	}
 
 	// Maximum 2025-26 full Age Pension including Pension & Energy Supplements
 	maxAnnual := 32_214.0 * cpiIndex
 	assetThreshold := 314_000.0 * cpiIndex
+	deemingTier1 := 62_600.0 * cpiIndex
+	incomeFreeArea := 5_512.0 * cpiIndex // A$212/fortnight * 26
 	if isCouple {
 		maxAnnual = 48_516.0 * cpiIndex
 		assetThreshold = 470_000.0 * cpiIndex
+		deemingTier1 = 103_800.0 * cpiIndex
+		incomeFreeArea = 9_672.0 * cpiIndex // A$372/fortnight * 26
 	}
 
-	if assessableAssets <= assetThreshold {
-		return maxAnnual
+	// 1. Statutory Assets Test
+	assetPension := maxAnnual
+	if assessableAssets > assetThreshold {
+		excessThousands := (assessableAssets - assetThreshold) / 1_000.0
+		assetPension = math.Max(0, maxAnnual-excessThousands*78.0)
 	}
 
-	excessThousands := (assessableAssets - assetThreshold) / 1_000.0
-	reduction := excessThousands * 78.0 // A$3/fortnight * 26 fortnights = A$78/yr per A$1,000
-	return math.Max(0, maxAnnual-reduction)
+	// 2. Statutory Income Test (0.25% lower deeming rate + 2.25% upper deeming rate + private income)
+	deemedIncome := math.Min(assessableAssets, deemingTier1) * 0.0025
+	if assessableAssets > deemingTier1 {
+		deemedIncome += (assessableAssets - deemingTier1) * 0.0225
+	}
+	totalAssessableIncome := deemedIncome + otherAnnualIncome
+	incomePension := maxAnnual
+	if totalAssessableIncome > incomeFreeArea {
+		incomePension = math.Max(0, maxAnnual-(totalAssessableIncome-incomeFreeArea)*0.50)
+	}
+
+	return math.Min(assetPension, incomePension)
 }
 
 // AustraliaSuperMinDrawRate returns the statutory minimum annual drawdown fraction for an

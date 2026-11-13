@@ -34,7 +34,7 @@ export const InsightsAndStressGrid: React.FC<InsightsAndStressGridProps> = ({
   const infLabels = Array.from(new Set(srrHeatmap.map((c) => c.inf_bucket_label)));
 
   return (
-    <section className="fs-card" aria-label="Actionable Levers, Historical Stress Tests & Sequence Risk">
+    <section className="fs-card">
       <div className="fs-card-header fs-wrap-header">
         <div>
           <h2 className="fs-card-title">Goal-Seek Optimizer &amp; Historical Battle-Test Lab</h2>
@@ -164,18 +164,21 @@ export const InsightsAndStressGrid: React.FC<InsightsAndStressGridProps> = ({
           </p>
           <div className="fs-table-scroll">
             <table className="fs-srr-table">
+              <caption className="visually-hidden">
+                Sequence-of-returns survival matrix by first 5-year real portfolio return and inflation regime
+              </caption>
               <thead>
                 <tr>
-                  <th>First 5Y Real Return \ CPI</th>
+                  <th scope="col">First 5Y Real Return \ CPI</th>
                   {infLabels.map((il) => (
-                    <th key={il}>{il}</th>
+                    <th key={il} scope="col">{il}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {retLabels.map((rl, rIdx) => (
                   <tr key={rl}>
-                    <td className="fs-srr-row-hdr">{rl}</td>
+                    <th scope="row" className="fs-srr-row-hdr">{rl}</th>
                     {infLabels.map((il, cIdx) => {
                       const cell = srrHeatmap.find(
                         (x) => x.ret_bucket_idx === rIdx && x.inf_bucket_idx === cIdx,

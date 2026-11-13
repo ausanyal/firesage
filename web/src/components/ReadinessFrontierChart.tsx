@@ -53,7 +53,7 @@ export const ReadinessFrontierChart: React.FC<ReadinessFrontierChartProps> = ({
   const hovered = hoverIdx !== null ? frontier[hoverIdx] : activeIdx >= 0 ? frontier[activeIdx] : frontier[0];
 
   return (
-    <section className="fs-card" aria-label="Retirement Age Readiness Frontier">
+    <section className="fs-card">
       <div className="fs-card-header">
         <div>
           <h2 className="fs-card-title">&ldquo;When Can I Retire?&rdquo; Readiness Frontier</h2>

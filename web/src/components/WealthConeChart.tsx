@@ -499,7 +499,7 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
   const hoveredTraj = hoveredPathId !== null ? samplePaths.find((p) => p.path_id === hoveredPathId) : null;
 
   return (
-    <section className="fs-card fs-hero-chart-card" aria-label="Stochastic Wealth Trajectory Cone">
+    <section className="fs-card fs-hero-chart-card">
       <div className="fs-card-header">
         <div>
           <h2 className="fs-card-title">Stochastic Wealth Cone &amp; Trajectory Explorer</h2>

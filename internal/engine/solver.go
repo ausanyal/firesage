@@ -124,9 +124,9 @@ func RunFullAnalysis(rawInput PlanInput) FullAnalysisResponse {
 	// Curate representative sample paths (Worst, P10, Median, P90 + 20 spaghetti trajectories)
 	samplePaths := selectSamplePaths(in.CurrentAge, outcomes)
 
-	// Pre-generate Common Random Numbers (CRN) scenario matrix once for smooth, ultra-fast solver & frontier probes
-	crnFull := pregenerateProbeScenarios(in, 320)
-	crnFast := crnFull[:minInt(140, len(crnFull))]
+	// Pre-generate Common Random Numbers (CRN) scenario matrix from the exact Monte Carlo seed stream
+	crnFull := pregenerateProbeScenarios(in, 600)
+	crnFast := crnFull[:minInt(200, len(crnFull))]
 
 	// Run parallel sub-analyses: Historical Crises, SRR Heatmap, SafeSpend/RequiredCorpus, Frontier, GeoArb, Levers
 	var (
@@ -202,9 +202,11 @@ func RunFullAnalysis(rawInput PlanInput) FullAnalysisResponse {
 }
 
 func solveSafeMonthlySpendCRN(in PlanInput, targetPct float64, scenarios [][]data.MarketYear) float64 {
-	lo := in.DesiredMonthlySpend * 0.15
-	hi := in.DesiredMonthlySpend * 2.8
-	for iter := 0; iter < 11; iter++ {
+	lo := math.Max(10.0, in.DesiredMonthlySpend*0.04)
+	corpusYieldMonthly := (in.CurrentCorpus * 0.10) / 12.0
+	savBoost := (in.MonthlySavings + in.MonthlyLockedSavings) * 2.5
+	hi := math.Max(in.DesiredMonthlySpend*5.0, corpusYieldMonthly+savBoost)
+	for iter := 0; iter < 15; iter++ {
 		mid := 0.5 * (lo + hi)
 		probe := in
 		probe.DesiredMonthlySpend = mid
@@ -217,16 +219,46 @@ func solveSafeMonthlySpendCRN(in PlanInput, targetPct float64, scenarios [][]dat
 	return 0.5 * (lo + hi)
 }
 
+func scaleBucketsForCorpus(in PlanInput, targetCorpus float64) AccountBuckets {
+	if !in.Buckets.UseGranular || in.CurrentCorpus <= 0 {
+		return defaultBuckets(in.Country, targetCorpus)
+	}
+	ratio := targetCorpus / in.CurrentCorpus
+	return AccountBuckets{
+		UseGranular:       true,
+		TaxableEquity:     in.Buckets.TaxableEquity * ratio,
+		TaxableCostBasis:  in.Buckets.TaxableCostBasis,
+		TaxableDebtCash:   in.Buckets.TaxableDebtCash * ratio,
+		TaxDeferredLocked: in.Buckets.TaxDeferredLocked * ratio,
+		TaxFreeAccount:    in.Buckets.TaxFreeAccount * ratio,
+		PensionLocked:     in.Buckets.PensionLocked * ratio,
+	}
+}
+
 func solveRequiredCorpusAtRetireCRN(in PlanInput, targetPct float64, scenarios [][]data.MarketYear) float64 {
 	probeBase := in
 	retOffset := maxInt(0, in.RetirementAge-in.CurrentAge)
 	probeBase.CurrentAge = in.RetirementAge
+	probeBase.preRetireYears = retOffset
 	probeBase.MonthlySavings = 0
-	probeBase.Buckets.UseGranular = false
+	probeBase.MonthlyLockedSavings = 0
 
-	// Slice scenarios starting from RetirementAge so retirement horizon matches exact crisis dynamics
+	// Slice scenarios starting from RetirementAge and carry forward pre-retirement real medical excess (medProd / cpiProd)
 	subScenarios := make([][]data.MarketYear, len(scenarios))
+	initMedRatios := make([]float64, len(scenarios))
 	for i, sc := range scenarios {
+		cpiProd := 1.0
+		medProd := 1.0
+		limit := minInt(retOffset, len(sc))
+		for k := 0; k < limit; k++ {
+			cpiProd *= (1.0 + sc[k].HeadlineCPI)
+			medProd *= (1.0 + sc[k].MedicalCPI)
+		}
+		if cpiProd > 0 {
+			initMedRatios[i] = medProd / cpiProd
+		} else {
+			initMedRatios[i] = 1.0
+		}
 		if retOffset < len(sc) {
 			subScenarios[i] = sc[retOffset:]
 		} else {
@@ -240,15 +272,15 @@ func solveRequiredCorpusAtRetireCRN(in PlanInput, targetPct float64, scenarios [
 	if in.AutoScaleLifestyleOnMove && retCity.ID != currCity.ID {
 		effScale = EffectiveCOLScale(currCity, retCity)
 	}
-	annualSpend := in.DesiredMonthlySpend * 12.0 * effScale
-	lo := annualSpend * 4.0
-	hi := annualSpend * 62.0
-	for iter := 0; iter < 11; iter++ {
+	annualSpend := math.Max(120.0, in.DesiredMonthlySpend*12.0*effScale)
+	lo := annualSpend * 1.5
+	hi := annualSpend * 90.0
+	for iter := 0; iter < 15; iter++ {
 		mid := 0.5 * (lo + hi)
 		probe := probeBase
 		probe.CurrentCorpus = mid
-		probe.Buckets = defaultBuckets(probe.Country, mid)
-		if probeSuccessOnly(probe, subScenarios) >= targetPct {
+		probe.Buckets = scaleBucketsForCorpus(in, mid)
+		if probeSuccessWithInitMed(probe, subScenarios, initMedRatios) >= targetPct {
 			hi = mid
 		} else {
 			lo = mid
@@ -348,17 +380,7 @@ func solveCoastFIREAgeCRN(in PlanInput, scenarios [][]data.MarketYear) float64 {
 			probe.MonthlySavings = 0
 			probe.MonthlyLockedSavings = 0
 		} else {
-			annualSav := (in.MonthlySavings + in.MonthlyLockedSavings) * 12.0
-			probe.MonthlySavings = 0
-			probe.MonthlyLockedSavings = 0
-			probe.LifeEvents = append(slices.Clone(in.LifeEvents), LifeEvent{
-				ID:          "coast-sav",
-				Name:        "Career Savings Until Coast Age",
-				StartAge:    in.CurrentAge,
-				EndAge:      stopSavingsAge - 1,
-				AnnualReal:  annualSav,
-				IsTaxableIn: false,
-			})
+			probe.stopSavingsAge = stopSavingsAge
 		}
 		return probeSuccessOnly(probe, scenarios)
 	}
@@ -387,7 +409,7 @@ func solveCoastFIREAgeCRN(in PlanInput, scenarios [][]data.MarketYear) float64 {
 func solveLeanFIREAgeCRN(in PlanInput, scenarios [][]data.MarketYear) float64 {
 	retCity := data.GetCity(in.RetirementCityID, in.Country)
 	probe := in
-	probe.DesiredMonthlySpend = retCity.MonthlyPresets.Lean
+	probe.DesiredMonthlySpend = data.ConvertCurrency(retCity.MonthlyPresets.Lean, retCity.Country, in.Country)
 	probe.AutoScaleLifestyleOnMove = false
 
 	return solveTargetAgeQuickCRN(probe, 90.0, scenarios)
@@ -481,6 +503,16 @@ func solveTargetAgeQuickCRN(in PlanInput, targetPct float64, scenarios [][]data.
 	check := func(age int) float64 {
 		p := in
 		p.RetirementAge = age
+		if len(p.LifeEvents) > 0 {
+			cloned := slices.Clone(p.LifeEvents)
+			for idx := range cloned {
+				if cloned[idx].ID == "lever-barista" {
+					cloned[idx].StartAge = age
+					cloned[idx].EndAge = age + 4
+				}
+			}
+			p.LifeEvents = cloned
+		}
 		return probeSuccessOnly(p, scenarios)
 	}
 	if check(lo) >= targetPct {
@@ -511,6 +543,11 @@ func computeActionLeversCRN(in PlanInput, baseRate float64, baseTargetAge float6
 	}
 
 	currCity := data.GetCity(in.CurrentCityID, in.Country)
+	retCity := data.GetCity(in.RetirementCityID, in.Country)
+	baristaColScale := 1.0
+	if in.AutoScaleLifestyleOnMove && retCity.ID != currCity.ID {
+		baristaColScale = EffectiveCOLScale(currCity, retCity)
+	}
 	altCity := defaultTier2ComparisonCity(currCity, in.Country)
 	altCityID := altCity.ID
 	altCityName := altCity.Name
@@ -545,7 +582,7 @@ func computeActionLeversCRN(in PlanInput, baseRate float64, baseTargetAge float6
 					Name:        "5-Yr Consulting Bridge",
 					StartAge:    p.RetirementAge,
 					EndAge:      p.RetirementAge + 4,
-					AnnualReal:  p.DesiredMonthlySpend * 12.0 * 0.35,
+					AnnualReal:  p.DesiredMonthlySpend * 12.0 * baristaColScale * 0.35,
 					IsTaxableIn: true,
 				})
 				return p

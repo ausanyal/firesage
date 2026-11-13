@@ -283,7 +283,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({
             </div>
           </div>
 
-          {/* City Selectors (33 global options -> <select> with <optgroup> per modern-web-guidance `forms`) */}
+          {/* City Selectors (34 global options -> <select> with <optgroup> per modern-web-guidance `forms`) */}
           <div className="fs-field">
             <label htmlFor="fs-curr-city">Accumulation City ({meta.flag} Working Years)</label>
             <select
@@ -301,7 +301,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({
           </div>
 
           <div className="fs-field">
-            <label htmlFor="fs-ret-city">Retirement City (FIRE Years — Global 33 Cities)</label>
+            <label htmlFor="fs-ret-city">Retirement City (Global {cities.length} Cities)</label>
             <select
               id="fs-ret-city"
               name="retirement_city_id"

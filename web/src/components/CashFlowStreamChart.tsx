@@ -50,7 +50,7 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
   const hovered = hoverIdx !== null ? bands[hoverIdx] : bands.find((b) => b.is_retired) || bands[0];
 
   return (
-    <section className="fs-card" aria-label="Lifespan Cash-Flow, Taxes & Liquidity Bridge">
+    <section className="fs-card">
       <div className="fs-card-header">
         <div>
           <h2 className="fs-card-title">Lifespan Cash-Flow, Tax &amp; Liquidity Bridge</h2>
@@ -101,7 +101,7 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
             <strong>Why Liquid vs Locked exists (Early-Retirement Bridge Check):</strong> If you FIRE before Age{' '}
             {unlockAge}, <strong className="text-emerald">Spendable Liquid Funds</strong> must carry every year until
             Age {unlockAge} without triggering penalties or preservation locks on{' '}
-            <strong style={{ color: '#818cf8' }}>Locked Retirement Accounts</strong> ({acctMeta.lockedShort}).
+            <strong className="text-indigo">Locked Retirement Accounts</strong> ({acctMeta.lockedShort}).
           </span>
         )}
       </div>
@@ -177,27 +177,33 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
             );
           })}
 
-          {/* Vertical Reference Markers for FIRE Age & Statutory Unlock Age */}
+          {/* Vertical Reference Markers for FIRE Age & Statutory Unlock Age (collision-safe) */}
           {(() => {
             const fireIdx = retirementAge !== undefined ? bands.findIndex((b) => b.age === retirementAge) : -1;
             const unlockIdx = bands.findIndex((b) => b.age === unlockAge);
+            const fireX = fireIdx >= 0 ? pad.left + (fireIdx / bands.length) * plotW : 0;
+            const unlockX = unlockIdx >= 0 ? pad.left + (unlockIdx / bands.length) * plotW : 0;
+            const closeTogether = fireIdx >= 0 && unlockIdx >= 0 && Math.abs(unlockX - fireX) < 62;
+            const fireNearRight = fireX > w - pad.right - 56;
+            const unlockNearRight = unlockX > w - pad.right - 78;
             return (
               <>
                 {fireIdx >= 0 && (
                   <g>
                     <line
-                      x1={pad.left + (fireIdx / bands.length) * plotW}
-                      x2={pad.left + (fireIdx / bands.length) * plotW}
+                      x1={fireX}
+                      x2={fireX}
                       y1={pad.top}
                       y2={pad.top + plotH}
-                      stroke="#f59e0b"
+                      stroke="var(--status-warn)"
                       strokeWidth="1.5"
                       strokeDasharray="4 3"
                     />
                     <text
-                      x={pad.left + (fireIdx / bands.length) * plotW + 3}
+                      x={fireNearRight ? fireX - 4 : fireX + 4}
                       y={pad.top + 10}
-                      fill="#f59e0b"
+                      textAnchor={fireNearRight ? 'end' : 'start'}
+                      fill="var(--status-warn)"
                       fontSize="9.5"
                       fontWeight="700"
                     >
@@ -208,18 +214,19 @@ export const CashFlowStreamChart: React.FC<CashFlowStreamChartProps> = ({
                 {unlockIdx >= 0 && (
                   <g>
                     <line
-                      x1={pad.left + (unlockIdx / bands.length) * plotW}
-                      x2={pad.left + (unlockIdx / bands.length) * plotW}
+                      x1={unlockX}
+                      x2={unlockX}
                       y1={pad.top}
                       y2={pad.top + plotH}
-                      stroke="#818cf8"
+                      stroke="var(--accent-indigo)"
                       strokeWidth="1.5"
                       strokeDasharray="3 3"
                     />
                     <text
-                      x={pad.left + (unlockIdx / bands.length) * plotW + 3}
-                      y={pad.top + 10}
-                      fill="#818cf8"
+                      x={unlockNearRight ? unlockX - 4 : unlockX + 4}
+                      y={closeTogether ? pad.top + 22 : pad.top + 10}
+                      textAnchor={unlockNearRight ? 'end' : 'start'}
+                      fill="var(--accent-indigo)"
                       fontSize="9.5"
                       fontWeight="700"
                     >

@@ -268,6 +268,9 @@ export const App: React.FC = () => {
     <div>
       {/* TOP HEADER BAR */}
       <header className="fs-topbar">
+        <a href="#main-content" className="fs-skip-link visually-hidden">
+          Skip to simulation results
+        </a>
         <div className="fs-brand">
           <div className="fs-logo-mark" aria-hidden="true">
             🔥
@@ -324,7 +327,7 @@ export const App: React.FC = () => {
       </header>
 
       {/* MAIN TWO-COLUMN WORKSPACE */}
-      <main className="fs-workspace">
+      <main id="main-content" tabIndex={-1} className="fs-workspace">
         <InputControlRail
           input={input}
           cities={metadata.cities}
@@ -334,7 +337,7 @@ export const App: React.FC = () => {
 
         <div className="fs-main-canvas">
           {/* EXECUTIVE TELEMETRY KPI STRIP */}
-          <section className="fs-kpi-grid" aria-label="Key FIRE Projection Metrics">
+          <div className="fs-kpi-grid">
             <div className="fs-kpi-card">
               <div className="fs-kpi-label">Plan Survival (Age {input.horizon_age})</div>
               <div className={`fs-kpi-val ${successTone}`}>{analysis.success_rate.toFixed(1)}%</div>
@@ -402,7 +405,7 @@ export const App: React.FC = () => {
                 {input.horizon_age}.
               </p>
             </div>
-          </section>
+          </div>
 
           {/* HERO CHART 1: STOCHASTIC WEALTH CONE & DRAGGABLE PLAYHEAD */}
           <WealthConeChart
@@ -477,27 +480,30 @@ export const App: React.FC = () => {
         {selectedTraj && (
           <div className="fs-table-scroll">
             <table className="fs-autopsy-table">
+              <caption className="visually-hidden">
+                Year-by-year trajectory autopsy for {selectedTraj.label}
+              </caption>
               <thead>
                 <tr>
-                  <th>Age</th>
-                  <th>Sampled Hist. Yr</th>
-                  <th>Equity Ret</th>
-                  <th>Bond Ret</th>
-                  <th>CPI</th>
-                  <th>Core Spend (Real)</th>
-                  <th>Healthcare</th>
-                  <th>Taxes</th>
-                  <th>Liquid Wealth</th>
-                  <th>Total Real Wealth</th>
+                  <th scope="col">Age</th>
+                  <th scope="col">Sampled Hist. Yr</th>
+                  <th scope="col">Equity Ret</th>
+                  <th scope="col">Bond Ret</th>
+                  <th scope="col">CPI</th>
+                  <th scope="col">Core Spend (Real)</th>
+                  <th scope="col">Healthcare</th>
+                  <th scope="col">Taxes</th>
+                  <th scope="col">Liquid Wealth</th>
+                  <th scope="col">Total Real Wealth</th>
                 </tr>
               </thead>
               <tbody>
                 {selectedTraj.steps.map((st) => (
                   <tr key={st.age}>
-                    <td>
+                    <th scope="row">
                       <strong>{st.age}</strong>
                       {st.age === input.retirement_age ? ' 🔥' : ''}
-                    </td>
+                    </th>
                     <td>{st.historical_ref_year}</td>
                     <td className={st.equity_return < 0 ? 'text-rose' : 'text-emerald'}>
                       {st.equity_return > 0 ? '+' : ''}
@@ -663,8 +669,8 @@ export const App: React.FC = () => {
               <strong>🇦🇺 Australia:</strong> Superannuation (15% concessional entry tax, ~0.6% fund earnings drag,{' '}
               <strong>100% tax-free unlock at Preservation Age 60</strong>, 4%–14% min pension drawdowns), Stage 3
               resident brackets (0%/16%/30%/37%/45% + LITO + 2% Medicare Levy + 50% CGT discount + ASX 30% franking
-              credit offset), <strong>Age-67 Centrelink Age Pension</strong> assets-test taper (A$78/yr per A$1,000 above
-              homeowner threshold), and Medicare + Private Hospital/Extras + gap OOP.
+              credit offset), <strong>Age-67 Centrelink Age Pension</strong> dual Assets Test (A$78/yr per A$1,000 above
+              homeowner threshold) &amp; Deeming Income Test (50c taper), and Medicare + Private Hospital/Extras + gap OOP.
               <br />
               <strong>🇪🇺 Europe &amp; CH:</strong> Sub-jurisdiction rules: <strong>Zurich &amp; Lugano (CH)</strong> 0%
               private CGT + cantonal net wealth tax (0.18%–0.32%) + mandatory per-capita LAMal insurance;{' '}
