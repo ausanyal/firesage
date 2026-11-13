@@ -52,7 +52,10 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  const pad = useMemo(() => ({ top: 26, right: 24, bottom: 38, left: 74 }), []);
+  const pad = useMemo(
+    () => ({ top: 26, right: size.width >= 580 ? 158 : 112, bottom: 38, left: 74 }),
+    [size.width],
+  );
 
   const maxVal = useMemo(() => {
     if (bands.length === 0) return 1;
@@ -236,7 +239,8 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
     ctx.restore();
 
     // Draw crisp Median P50 hero curve
-    ctx.strokeStyle = valueBasis === 'real' ? (isDark ? '#34d399' : '#059669') : isDark ? '#38bdf8' : '#0284c7';
+    const p50Color = valueBasis === 'real' ? (isDark ? '#34d399' : '#059669') : isDark ? '#38bdf8' : '#0284c7';
+    ctx.strokeStyle = p50Color;
     ctx.lineWidth = 2.8;
     ctx.beginPath();
     bands.forEach((b, i) => {
@@ -247,6 +251,105 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
       else ctx.lineTo(x, y);
     });
     ctx.stroke();
+
+    // Right-margin direct curve end labels (P90, P50 Median, P10 Stress) with collision avoidance
+    const lastBand = bands[bands.length - 1];
+    const endX = xForIndex(bands.length - 1);
+    const valP90 = valueBasis === 'real' ? lastBand.real_p90 : lastBand.nominal_p90;
+    const valP50 = valueBasis === 'real' ? lastBand.real_p50 : lastBand.nominal_p50;
+    const valP10 = valueBasis === 'real' ? lastBand.real_p10 : lastBand.nominal_p10;
+
+    interface EndTag {
+      tag: string;
+      valStr: string;
+      rawY: number;
+      drawY: number;
+      color: string;
+      isHero?: boolean;
+    }
+    const endTags: EndTag[] = [
+      {
+        tag: 'P90 Upside',
+        valStr: formatMoneyCompact(valP90, country),
+        rawY: yForValue(valP90),
+        drawY: yForValue(valP90),
+        color: isDark ? '#34d399' : '#047857',
+      },
+      {
+        tag: 'P50 Median',
+        valStr: formatMoneyCompact(valP50, country),
+        rawY: yForValue(valP50),
+        drawY: yForValue(valP50),
+        color: p50Color,
+        isHero: true,
+      },
+      {
+        tag: 'P10 Stress',
+        valStr: formatMoneyCompact(valP10, country),
+        rawY: yForValue(valP10),
+        drawY: yForValue(valP10),
+        color: isDark ? '#fb7185' : '#e11d48',
+      },
+    ].sort((a, b) => a.rawY - b.rawY);
+
+    const minY = pad.top + 11;
+    const maxYLabel = size.height - pad.bottom - 11;
+    const minGap = 24;
+    for (let i = 0; i < endTags.length; i++) {
+      if (i === 0) {
+        endTags[i].drawY = Math.max(minY, endTags[i].rawY);
+      } else {
+        endTags[i].drawY = Math.max(endTags[i - 1].drawY + minGap, endTags[i].rawY);
+      }
+    }
+    if (endTags[endTags.length - 1].drawY > maxYLabel) {
+      endTags[endTags.length - 1].drawY = maxYLabel;
+      for (let i = endTags.length - 2; i >= 0; i--) {
+        endTags[i].drawY = Math.min(endTags[i].drawY, endTags[i + 1].drawY - minGap);
+      }
+    }
+
+    endTags.forEach((et) => {
+      // Dot on curve terminus + connector line
+      ctx.fillStyle = et.color;
+      ctx.beginPath();
+      ctx.arc(endX, et.rawY, et.isHero ? 4 : 3, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = et.color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(endX + 3, et.rawY);
+      ctx.lineTo(endX + 9, et.drawY);
+      ctx.stroke();
+
+      const labelText = size.width >= 580 ? `${et.tag}: ${et.valStr}` : `${et.tag.split(' ')[0]} ${et.valStr}`;
+      ctx.font = et.isHero ? '700 11px ui-sans-serif, system-ui, sans-serif' : '600 10.5px ui-sans-serif, system-ui, sans-serif';
+      const pillW = Math.min(pad.right - 12, ctx.measureText(labelText).width + 12);
+      const pillX = endX + 10;
+      const pillH = 20;
+
+      if (et.isHero) {
+        ctx.fillStyle = et.color;
+        ctx.beginPath();
+        ctx.roundRect(pillX, et.drawY - pillH / 2, pillW, pillH, 6);
+        ctx.fill();
+        ctx.fillStyle = isDark ? '#061310' : '#ffffff';
+      } else {
+        ctx.fillStyle = isDark ? 'rgba(15, 23, 42, 0.85)' : 'rgba(241, 245, 249, 0.95)';
+        ctx.beginPath();
+        ctx.roundRect(pillX, et.drawY - pillH / 2, pillW, pillH, 6);
+        ctx.fill();
+        ctx.strokeStyle = et.color;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = et.color;
+      }
+
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(labelText, pillX + 6, et.drawY);
+    });
 
     // Vertical Retirement Age Playhead
     const startAge = bands[0].age;
@@ -429,6 +532,40 @@ export const WealthConeChart: React.FC<WealthConeChartProps> = ({
               Future {country === 'IN' ? '₹' : '$'} (Nominal)
             </label>
           </div>
+        </div>
+      </div>
+
+      {/* Plain-English Valuation Basis & Curve Legend */}
+      <div className="fs-cone-guide">
+        <div className="fs-basis-explainer">
+          {valueBasis === 'real' ? (
+            <span>
+              <strong>Showing Today&apos;s {country === 'IN' ? '₹' : '$'} (Inflation-Adjusted / Real):</strong>{' '}
+              Purchasing power expressed in today&apos;s money — so ₹/$ values stay directly comparable to what your
+              salary and expenses buy today.
+            </span>
+          ) : (
+            <span>
+              <strong>Showing Future {country === 'IN' ? '₹' : '$'} (Nominal):</strong> Raw future rupee/dollar balances
+              printed on statements, inflated by cumulative CPI (larger numbers, lower purchasing power per unit).
+            </span>
+          )}
+        </div>
+        <div className="fs-legend-row">
+          <span>
+            <i style={{ background: valueBasis === 'real' ? '#10b981' : '#0284c7' }} />{' '}
+            <strong>P50 Median</strong> (typical outcome)
+          </span>
+          <span>
+            <i style={{ background: valueBasis === 'real' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(14, 165, 233, 0.4)' }} />{' '}
+            P25–P75 Middle 50% band
+          </span>
+          <span>
+            <i style={{ background: '#34d399', border: '1px dashed #34d399' }} /> P90 Upside (top 10% bull markets)
+          </span>
+          <span>
+            <i style={{ background: '#f43f5e' }} /> P10 Stress (bottom 10% bear markets)
+          </span>
         </div>
       </div>
 

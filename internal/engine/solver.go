@@ -340,9 +340,11 @@ func solveCoastFIREAgeCRN(in PlanInput, scenarios [][]data.MarketYear) float64 {
 		probe.RetirementAge = traditionalRetire
 		if stopSavingsAge <= in.CurrentAge {
 			probe.MonthlySavings = 0
+			probe.MonthlyLockedSavings = 0
 		} else {
-			annualSav := in.MonthlySavings * 12.0
+			annualSav := (in.MonthlySavings + in.MonthlyLockedSavings) * 12.0
 			probe.MonthlySavings = 0
+			probe.MonthlyLockedSavings = 0
 			probe.LifeEvents = append(slices.Clone(in.LifeEvents), LifeEvent{
 				ID:          "coast-sav",
 				Name:        "Career Savings Until Coast Age",
@@ -432,10 +434,7 @@ func computeGeoArbitrageSummaryCRN(in PlanInput, currentPlanRate float64, scenar
 	stayAge := solveTargetAgeQuickCRN(stayProbe, 90.0, scenarios)
 	moveAge := solveTargetAgeQuickCRN(moveProbe, 90.0, scenarios)
 
-	colScale := 1.0
-	if currCity.CostOfLivingIndex > 0 {
-		colScale = compCity.CostOfLivingIndex / currCity.CostOfLivingIndex
-	}
+	colScale := EffectiveCOLScale(currCity, compCity)
 
 	return GeoArbitrageSummary{
 		CurrentCity:            currCity,
@@ -502,6 +501,7 @@ func computeActionLeversCRN(in PlanInput, baseRate float64, baseTargetAge float6
 			desc:  "Accelerates pre-FIRE compounding and raises your retirement safety cushion.",
 			mutate: func(p PlanInput) PlanInput {
 				p.MonthlySavings *= 1.25
+				p.MonthlyLockedSavings *= 1.25
 				return p
 			},
 		},

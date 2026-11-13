@@ -37,6 +37,25 @@ func CrisesByCountry(country CountryCode) []HistoricalCrisis {
 	return indiaCrises
 }
 
+// DefaultUSDToINR is the baseline nominal FX parity used when modeling cross-border
+// accumulation and retirement moves between India (INR) and the USA (USD).
+const DefaultUSDToINR = 85.0
+
+// ConvertCurrency converts a monetary amount between India (INR) and USA (USD)
+// using DefaultUSDToINR.
+func ConvertCurrency(amount float64, from, to CountryCode) float64 {
+	if from == to {
+		return amount
+	}
+	if from == CountryUSA && to == CountryIndia {
+		return amount * DefaultUSDToINR
+	}
+	if from == CountryIndia && to == CountryUSA {
+		return amount / DefaultUSDToINR
+	}
+	return amount
+}
+
 var allCities = []CityProfile{
 	// ============================================================================
 	// INDIA (₹ INR) — Tier-1 Metros & Tier-2 Lifestyle / Retirement Hubs

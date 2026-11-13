@@ -84,6 +84,7 @@ export interface PlanInput {
   current_corpus: number;
   buckets: AccountBuckets;
   monthly_savings: number;
+  monthly_locked_savings?: number;
   annual_savings_step_up: number;
   desired_monthly_spend: number;
   allocation: AssetAllocation;
@@ -247,6 +248,7 @@ export interface MetadataResponse {
   crises: Record<CountryCode, HistoricalCrisis[]>;
   valuations: Record<CountryCode, ValuationInfo>;
   defaults: Record<CountryCode, PlanInput>;
+  fx_usd_to_inr?: number;
 }
 
 export interface SavedPlanRecord {

@@ -39,12 +39,9 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	if in.RetirementCityID == "" {
 		in.RetirementCityID = currCity.ID
 	} else {
-		retCity := data.GetCity(in.RetirementCityID, in.Country)
-		if retCity.Country != in.Country {
-			in.RetirementCityID = currCity.ID
-		} else {
-			in.RetirementCityID = retCity.ID
-		}
+		// Allow cross-country retirement (e.g., work in India -> retire in USA or vice versa).
+		retCity := data.GetCity(in.RetirementCityID, currCity.Country)
+		in.RetirementCityID = retCity.ID
 	}
 
 	if in.CurrentCorpus < 0 {
@@ -52,6 +49,9 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	}
 	if in.MonthlySavings < 0 {
 		in.MonthlySavings = 0
+	}
+	if in.MonthlyLockedSavings < 0 {
+		in.MonthlyLockedSavings = 0
 	}
 	if in.DesiredMonthlySpend <= 0 {
 		in.DesiredMonthlySpend = currCity.MonthlyPresets.Standard
@@ -330,8 +330,8 @@ func simulatePathInternal(
 
 	// Compute target baseline annual real spend in retirement
 	colScale := 1.0
-	if in.AutoScaleLifestyleOnMove && retCity.ID != currCity.ID && currCity.CostOfLivingIndex > 0 {
-		colScale = retCity.CostOfLivingIndex / currCity.CostOfLivingIndex
+	if in.AutoScaleLifestyleOnMove && retCity.ID != currCity.ID {
+		colScale = EffectiveCOLScale(currCity, retCity)
 	}
 	baseRetireAnnualReal := in.DesiredMonthlySpend * 12.0 * colScale
 
@@ -542,47 +542,82 @@ func simulatePathInternal(
 			// ===================== ACCUMULATION PHASE =====================
 			yearsWorked := age - in.CurrentAge
 			stepUpMult := math.Pow(1.0+in.AnnualSavingsStepUp, float64(yearsWorked))
-			// Note: AnnualSavingsStepUp is nominal career growth; ensure at least CPI pace if stepUp==0?
-			// If user specifies AnnualSavingsStepUp (default 0.06), compound nominally, or if 0, inflate with CPI so real savings stay constant.
+			// Note: AnnualSavingsStepUp is nominal career growth; if 0, inflate with CPI so real savings stay constant.
+			savMult := cpiIndex
 			if in.AnnualSavingsStepUp > 0 {
-				savingsInNom = in.MonthlySavings * 12.0 * stepUpMult
-			} else {
-				savingsInNom = in.MonthlySavings * 12.0 * cpiIndex
+				savMult = stepUpMult
 			}
 
-			netAddition := savingsInNom + milestoneInNom - milestoneOutNom
-			if netAddition >= 0 {
-				if in.Country == data.CountryUSA {
-					toTaxableEq := netAddition * 0.42
-					toTaxableDebt := netAddition * 0.08
-					to401k := netAddition * 0.34
-					toRoth := netAddition * 0.16
+			if in.MonthlyLockedSavings > 0 || in.Buckets.UseGranular {
+				liqSavNom := in.MonthlySavings * 12.0 * savMult
+				lockedSavNom := in.MonthlyLockedSavings * 12.0 * savMult
+				savingsInNom = liqSavNom + lockedSavNom
+
+				netLiq := liqSavNom + milestoneInNom - milestoneOutNom
+				if netLiq >= 0 {
+					eqShare := clamp(in.Allocation.Equity+in.Allocation.Gold, 0.40, 0.90)
+					toTaxableEq := netLiq * eqShare
+					toTaxableDebt := netLiq * (1.0 - eqShare)
 					taxableEq += toTaxableEq
 					taxableBasis += toTaxableEq
 					taxableDebt += toTaxableDebt
-					taxDeferred += to401k
-					rothSeasoned += toRoth
 				} else {
-					toTaxableEq := netAddition * 0.56
-					toTaxableDebt := netAddition * 0.12
-					toEPF := netAddition * 0.18
-					toPPF := netAddition * 0.07
-					toNPS := netAddition * 0.07
-					taxableEq += toTaxableEq
-					taxableBasis += toTaxableEq
-					taxableDebt += toTaxableDebt
-					taxDeferred += toEPF
-					rothSeasoned += toPPF
-					pensionLocked += toNPS
+					deficit := -netLiq
+					drawn, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, deficit)
+					rem := deficit - drawn
+					if rem > 0 {
+						pull := math.Min(rem, rothSeasoned)
+						rothSeasoned -= pull
+					}
+				}
+
+				if lockedSavNom > 0 {
+					if in.Country == data.CountryUSA {
+						taxDeferred += lockedSavNom * 0.68
+						rothSeasoned += lockedSavNom * 0.32
+					} else {
+						taxDeferred += lockedSavNom * 0.5625
+						rothSeasoned += lockedSavNom * 0.21875
+						pensionLocked += lockedSavNom * 0.21875
+					}
 				}
 			} else {
-				// Large pre-retirement milestone outflow exceeding annual savings (e.g. home down payment / sabbatical)
-				deficit := -netAddition
-				drawn, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, deficit)
-				rem := deficit - drawn
-				if rem > 0 {
-					pull := math.Min(rem, rothSeasoned)
-					rothSeasoned -= pull
+				savingsInNom = in.MonthlySavings * 12.0 * savMult
+
+				netAddition := savingsInNom + milestoneInNom - milestoneOutNom
+				if netAddition >= 0 {
+					if in.Country == data.CountryUSA {
+						toTaxableEq := netAddition * 0.42
+						toTaxableDebt := netAddition * 0.08
+						to401k := netAddition * 0.34
+						toRoth := netAddition * 0.16
+						taxableEq += toTaxableEq
+						taxableBasis += toTaxableEq
+						taxableDebt += toTaxableDebt
+						taxDeferred += to401k
+						rothSeasoned += toRoth
+					} else {
+						toTaxableEq := netAddition * 0.56
+						toTaxableDebt := netAddition * 0.12
+						toEPF := netAddition * 0.18
+						toPPF := netAddition * 0.07
+						toNPS := netAddition * 0.07
+						taxableEq += toTaxableEq
+						taxableBasis += toTaxableEq
+						taxableDebt += toTaxableDebt
+						taxDeferred += toEPF
+						rothSeasoned += toPPF
+						pensionLocked += toNPS
+					}
+				} else {
+					// Large pre-retirement milestone outflow exceeding annual savings (e.g. home down payment / sabbatical)
+					deficit := -netAddition
+					drawn, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, deficit)
+					rem := deficit - drawn
+					if rem > 0 {
+						pull := math.Min(rem, rothSeasoned)
+						rothSeasoned -= pull
+					}
 				}
 			}
 
@@ -659,8 +694,8 @@ func simulatePathInternal(
 					ordinaryIncome += mandatoryRMD
 				}
 
-				// Estimate baseline healthcare before discretionary conversions
-				estHealth := tax.USHealthcareAnnual(age, in.IsCouple, ordinaryIncome, activeCity, cpiIndex, medIndex)
+				// Estimate baseline healthcare (using retirement domicile's healthcare system & FX)
+				estHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, ordinaryIncome, cpiIndex, medIndex)
 				grossNeed := coreLivingOutNom + estHealth + milestoneOutNom - guaranteedInNom - milestoneInNom
 				if grossNeed < 0 {
 					// Surplus guaranteed/milestone income gets reinvested into taxable
@@ -754,13 +789,11 @@ func simulatePathInternal(
 					}
 				}
 
-				// Final exact healthcare & Fed + State tax calculation based on realized MAGI
+				// Final exact healthcare & domicile tax calculation (US or India depending on RetirementCity)
 				finalMAGI := ordinaryIncome + realizedLTCG
-				healthcareOutNom = tax.USHealthcareAnnual(age, in.IsCouple, finalMAGI, activeCity, cpiIndex, medIndex)
+				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
 				extraHealth := math.Max(0, healthcareOutNom-estHealth)
-				fedTax := tax.USFederalTax(ordinaryIncome, realizedLTCG, in.IsCouple, cpiIndex)
-				stateTax := tax.USStateTax(activeCity.StateCode, ordinaryIncome, realizedLTCG, in.IsCouple, cpiIndex)
-				totalIncomeTax := fedTax + stateTax
+				totalIncomeTax := computeResidencyTaxNom(in.Country, activeCity, in.IsCouple, ordinaryIncome, realizedLTCG, cpiIndex)
 				taxesOutNom += totalIncomeTax
 
 				// Pay tax + any healthcare delta from remaining accounts
@@ -794,8 +827,9 @@ func simulatePathInternal(
 					}
 				}
 			} else {
-				// ===================== INDIA DECUMULATION & TAX SEQUENCING =====================
-				healthcareOutNom = tax.IndiaHealthcareAnnual(age, in.IsCouple, activeCity, cpiIndex, medIndex)
+				// ===================== INDIA ACCUMULATION ACCOUNTS DECUMULATION =====================
+				estMAGI := milestoneTaxableInNom + guaranteedInNom
+				healthcareOutNom = computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, estMAGI, cpiIndex, medIndex)
 				slabIncome := milestoneTaxableInNom + guaranteedInNom // NPS annuity + pension + consulting
 
 				grossNeed := coreLivingOutNom + healthcareOutNom + milestoneOutNom - guaranteedInNom - milestoneInNom
@@ -878,9 +912,14 @@ func simulatePathInternal(
 					rothOrHarvestNom = harvest
 				}
 
-				ltcgTax := tax.IndiaEquityLTCGTax(realizedEqGain, cpiIndex)
-				slabTax := tax.IndiaNewRegimeSlabTax(slabIncome, cpiIndex)
-				taxesOutNom = ltcgTax + slabTax
+				taxesOutNom = computeResidencyTaxNom(in.Country, activeCity, in.IsCouple, slabIncome, realizedEqGain, cpiIndex)
+				if activeCity.Country == data.CountryUSA {
+					finalMAGI := slabIncome + realizedEqGain
+					finalHealth := computeResidencyHealthcareNom(in.Country, activeCity, age, in.IsCouple, finalMAGI, cpiIndex, medIndex)
+					extraHealth := math.Max(0, finalHealth-healthcareOutNom)
+					healthcareOutNom = finalHealth
+					taxesOutNom += extraHealth
+				}
 
 				if taxesOutNom > 0 {
 					paid, _ := drawFromLiquid(&taxableDebt, &taxableEq, &taxableBasis, taxesOutNom)
@@ -1092,4 +1131,60 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// EffectiveCOLScale computes the retirement spending multiplier when relocating from
+// currCity to retCity, handling both intra-country cost-of-living index ratios and
+// cross-country purchasing-power ratios using calibrated Standard presets + FX parity.
+func EffectiveCOLScale(currCity, retCity data.CityProfile) float64 {
+	if retCity.ID == currCity.ID {
+		return 1.0
+	}
+	if currCity.Country == retCity.Country {
+		if currCity.CostOfLivingIndex > 0 {
+			return retCity.CostOfLivingIndex / currCity.CostOfLivingIndex
+		}
+		return 1.0
+	}
+	if currCity.MonthlyPresets.Standard > 0 && retCity.MonthlyPresets.Standard > 0 {
+		retStdInCurr := data.ConvertCurrency(retCity.MonthlyPresets.Standard, retCity.Country, currCity.Country)
+		return retStdInCurr / currCity.MonthlyPresets.Standard
+	}
+	return 1.0
+}
+
+func computeResidencyHealthcareNom(
+	acctCountry data.CountryCode,
+	retCity data.CityProfile,
+	age int,
+	isCouple bool,
+	magiAcctCurrency float64,
+	cpiIndex, medIndex float64,
+) float64 {
+	if retCity.Country == data.CountryUSA {
+		magiUSD := data.ConvertCurrency(magiAcctCurrency, acctCountry, data.CountryUSA)
+		hcUSD := tax.USHealthcareAnnual(age, isCouple, magiUSD, retCity, cpiIndex, medIndex)
+		return data.ConvertCurrency(hcUSD, data.CountryUSA, acctCountry)
+	}
+	hcINR := tax.IndiaHealthcareAnnual(age, isCouple, retCity, cpiIndex, medIndex)
+	return data.ConvertCurrency(hcINR, data.CountryIndia, acctCountry)
+}
+
+func computeResidencyTaxNom(
+	acctCountry data.CountryCode,
+	retCity data.CityProfile,
+	isCouple bool,
+	ordinaryAcctCurrency, ltcgAcctCurrency float64,
+	cpiIndex float64,
+) float64 {
+	ordConv := data.ConvertCurrency(ordinaryAcctCurrency, acctCountry, retCity.Country)
+	ltcgConv := data.ConvertCurrency(ltcgAcctCurrency, acctCountry, retCity.Country)
+	if retCity.Country == data.CountryUSA {
+		fed := tax.USFederalTax(ordConv, ltcgConv, isCouple, cpiIndex)
+		st := tax.USStateTax(retCity.StateCode, ordConv, ltcgConv, isCouple, cpiIndex)
+		return data.ConvertCurrency(fed+st, data.CountryUSA, acctCountry)
+	}
+	ltcg := tax.IndiaEquityLTCGTax(ltcgConv, cpiIndex)
+	slab := tax.IndiaNewRegimeSlabTax(ordConv, cpiIndex)
+	return data.ConvertCurrency(ltcg+slab, data.CountryIndia, acctCountry)
 }

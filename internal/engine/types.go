@@ -76,6 +76,7 @@ type PlanInput struct {
 	CurrentCorpus             float64            `json:"current_corpus"`
 	Buckets                   AccountBuckets     `json:"buckets"`
 	MonthlySavings            float64            `json:"monthly_savings"`
+	MonthlyLockedSavings      float64            `json:"monthly_locked_savings"`
 	AnnualSavingsStepUp       float64            `json:"annual_savings_step_up"` // e.g. 0.06 = 6%/yr career SIP step-up
 	DesiredMonthlySpend       float64            `json:"desired_monthly_spend"`  // Today's purchasing power in CurrentCity (before move scaling)
 

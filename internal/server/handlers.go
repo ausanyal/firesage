@@ -59,6 +59,7 @@ func handleMetadata(w http.ResponseWriter, _ *http.Request) {
 			"IN": defaultCountryTemplate(data.CountryIndia),
 			"US": defaultCountryTemplate(data.CountryUSA),
 		},
+		"fx_usd_to_inr": data.DefaultUSDToINR,
 	})
 }
 
@@ -80,16 +81,26 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 func defaultCountryTemplate(country data.CountryCode) engine.PlanInput {
 	if country == data.CountryUSA {
 		return engine.NormalizePlanInput(engine.PlanInput{
-			Country:                   data.CountryUSA,
-			CurrentAge:                34,
-			RetirementAge:             46,
-			HorizonAge:                92,
-			IsCouple:                  true,
-			CurrentCityID:             "us-san-jose",
-			RetirementCityID:          "us-raleigh",
-			AutoScaleLifestyleOnMove:  true,
-			CurrentCorpus:             650_000,
-			MonthlySavings:            6_500,
+			Country:                  data.CountryUSA,
+			CurrentAge:               34,
+			RetirementAge:            46,
+			HorizonAge:               92,
+			IsCouple:                 true,
+			CurrentCityID:            "us-san-jose",
+			RetirementCityID:         "us-raleigh",
+			AutoScaleLifestyleOnMove: true,
+			CurrentCorpus:            650_000,
+			Buckets: engine.AccountBuckets{
+				UseGranular:       true,
+				TaxableEquity:     260_000,
+				TaxableCostBasis:  0.65,
+				TaxableDebtCash:   52_000,
+				TaxDeferredLocked: 247_000,
+				TaxFreeAccount:    91_000,
+				PensionLocked:     0,
+			},
+			MonthlySavings:            3_250,
+			MonthlyLockedSavings:      3_250,
 			AnnualSavingsStepUp:       0.04,
 			DesiredMonthlySpend:       10_500, // San Jose standard; scales automatically on Raleigh move!
 			Allocation:                engine.AssetAllocation{Equity: 0.72, Debt: 0.20, Gold: 0.03, Cash: 0.05, UseBondTent: true},
@@ -107,18 +118,28 @@ func defaultCountryTemplate(country data.CountryCode) engine.PlanInput {
 	}
 
 	return engine.NormalizePlanInput(engine.PlanInput{
-		Country:                   data.CountryIndia,
-		CurrentAge:                33,
-		RetirementAge:             45,
-		HorizonAge:                90,
-		IsCouple:                  true,
-		CurrentCityID:             "in-bengaluru",
-		RetirementCityID:          "in-goa",
-		AutoScaleLifestyleOnMove:  true,
-		CurrentCorpus:             18_000_000, // ₹1.80 Cr
-		MonthlySavings:            150_000,    // ₹1.50 L/mo SIP
-		AnnualSavingsStepUp:       0.07,       // 7%/yr career step-up
-		DesiredMonthlySpend:       140_000,    // ₹1.40 L/mo Bengaluru equivalent (~₹1.09L in Goa)
+		Country:                  data.CountryIndia,
+		CurrentAge:               33,
+		RetirementAge:            45,
+		HorizonAge:               90,
+		IsCouple:                 true,
+		CurrentCityID:            "in-bengaluru",
+		RetirementCityID:         "in-goa",
+		AutoScaleLifestyleOnMove: true,
+		CurrentCorpus:            18_000_000, // ₹1.80 Cr
+		Buckets: engine.AccountBuckets{
+			UseGranular:       true,
+			TaxableEquity:     8_640_000,
+			TaxableCostBasis:  0.65,
+			TaxableDebtCash:   2_520_000,
+			TaxDeferredLocked: 3_600_000,
+			TaxFreeAccount:    1_800_000,
+			PensionLocked:     1_440_000,
+		},
+		MonthlySavings:            105_000, // ₹1.05 L/mo liquid MF SIP
+		MonthlyLockedSavings:      45_000,  // ₹45 K/mo EPF + VPF + NPS
+		AnnualSavingsStepUp:       0.07,    // 7%/yr career step-up
+		DesiredMonthlySpend:       140_000, // ₹1.40 L/mo Bengaluru equivalent (~₹1.09L in Goa)
 		Allocation:                engine.AssetAllocation{Equity: 0.65, Debt: 0.22, Gold: 0.08, Cash: 0.05, UseBondTent: true},
 		ExpenseRatioBps:           25,
 		WithdrawalStrategy:        engine.StrategyGuytonKlinger,

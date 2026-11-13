@@ -22,17 +22,97 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
   const [newEventAge, setNewEventAge] = useState(input.retirement_age + 4);
   const [newEventAmt, setNewEventAmt] = useState(input.country === 'IN' ? -2_500_000 : -80_000);
 
-  const countryCities = cities.filter((c) => c.country === input.country);
+  const indiaCities = cities.filter((c) => c.country === 'IN');
+  const usCities = cities.filter((c) => c.country === 'US');
+  const countryCities = input.country === 'US' ? usCities : indiaCities;
   const currentCity = countryCities.find((c) => c.id === input.current_city_id) || countryCities[0];
-  const retireCity = countryCities.find((c) => c.id === input.retirement_city_id) || currentCity;
+  const retireCity = cities.find((c) => c.id === input.retirement_city_id) || currentCity;
+  const isCrossBorder = Boolean(currentCity && retireCity && currentCity.country !== retireCity.country);
 
   const sym = currencySymbol(input.country);
   const corpusStep = input.country === 'IN' ? 500_000 : 25_000;
   const savingsStep = input.country === 'IN' ? 5_000 : 250;
   const spendStep = input.country === 'IN' ? 5_000 : 250;
 
+  const liquidCorpus = Math.max(
+    0,
+    Math.round((input.buckets?.taxable_equity || 0) + (input.buckets?.taxable_debt_cash || 0)),
+  );
+  const lockedCorpus = Math.max(
+    0,
+    Math.round(
+      (input.buckets?.tax_deferred_locked || 0) +
+        (input.buckets?.tax_free_account || 0) +
+        (input.buckets?.pension_locked || 0),
+    ),
+  );
+  const lockedSavings = Math.max(0, Math.round(input.monthly_locked_savings || 0));
+
   const update = (patch: Partial<PlanInput>) => {
     onChange({ ...input, ...patch });
+  };
+
+  const updateBucketsAndCorpus = (nextBuckets: PlanInput['buckets']) => {
+    const nextTotal =
+      Math.max(0, nextBuckets.taxable_equity) +
+      Math.max(0, nextBuckets.taxable_debt_cash) +
+      Math.max(0, nextBuckets.tax_deferred_locked) +
+      Math.max(0, nextBuckets.tax_free_account) +
+      Math.max(0, nextBuckets.pension_locked);
+    update({
+      current_corpus: Math.round(nextTotal),
+      buckets: { ...nextBuckets, use_granular: true },
+    });
+  };
+
+  const setLiquidCorpusTotal = (nextLiq: number) => {
+    const prevLiq = input.buckets.taxable_equity + input.buckets.taxable_debt_cash;
+    const eqRatio =
+      prevLiq > 1 ? input.buckets.taxable_equity / prevLiq : input.country === 'US' ? 0.83 : 0.77;
+    const taxable_equity = Math.round(nextLiq * eqRatio);
+    const taxable_debt_cash = Math.max(0, Math.round(nextLiq - taxable_equity));
+    updateBucketsAndCorpus({
+      ...input.buckets,
+      taxable_equity,
+      taxable_debt_cash,
+    });
+  };
+
+  const setLockedCorpusTotal = (nextLocked: number) => {
+    const prevLocked =
+      input.buckets.tax_deferred_locked + input.buckets.tax_free_account + input.buckets.pension_locked;
+    if (prevLocked > 1) {
+      const defShare = input.buckets.tax_deferred_locked / prevLocked;
+      const freeShare = input.buckets.tax_free_account / prevLocked;
+      const tax_deferred_locked = Math.round(nextLocked * defShare);
+      const tax_free_account = Math.round(nextLocked * freeShare);
+      const pension_locked = Math.max(0, Math.round(nextLocked - tax_deferred_locked - tax_free_account));
+      updateBucketsAndCorpus({
+        ...input.buckets,
+        tax_deferred_locked,
+        tax_free_account,
+        pension_locked,
+      });
+    } else if (input.country === 'US') {
+      const tax_deferred_locked = Math.round(nextLocked * 0.73);
+      const tax_free_account = Math.max(0, Math.round(nextLocked - tax_deferred_locked));
+      updateBucketsAndCorpus({
+        ...input.buckets,
+        tax_deferred_locked,
+        tax_free_account,
+        pension_locked: 0,
+      });
+    } else {
+      const tax_deferred_locked = Math.round(nextLocked * 0.53);
+      const tax_free_account = Math.round(nextLocked * 0.26);
+      const pension_locked = Math.max(0, Math.round(nextLocked - tax_deferred_locked - tax_free_account));
+      updateBucketsAndCorpus({
+        ...input.buckets,
+        tax_deferred_locked,
+        tax_free_account,
+        pension_locked,
+      });
+    }
   };
 
   const applyLifestylePreset = (amount: number) => {
@@ -160,22 +240,46 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
           </div>
 
           <div className="fs-field">
-            <label htmlFor="fs-ret-city">Retirement City (FIRE Years)</label>
+            <label htmlFor="fs-ret-city">Retirement City (FIRE Years — India or USA)</label>
             <select
               id="fs-ret-city"
               name="retirement_city_id"
               value={input.retirement_city_id}
               onChange={(e) => update({ retirement_city_id: e.target.value })}
             >
-              {countryCities.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.tier}
-                  {c.country === 'US' ? ` • ${c.state_code} ${c.state_top_tax_rate_pct}% max tax` : ''})
-                </option>
+              {(input.country === 'IN'
+                ? [
+                    { label: '🇮🇳 India Cities', list: indiaCities },
+                    { label: '🇺🇸 US Cities & States (Cross-Border)', list: usCities },
+                  ]
+                : [
+                    { label: '🇺🇸 US Cities & States', list: usCities },
+                    { label: '🇮🇳 India Cities (Cross-Border)', list: indiaCities },
+                  ]
+              ).map((grp) => (
+                <optgroup key={grp.label} label={grp.label}>
+                  {grp.list.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.tier}
+                      {c.country === 'US' ? ` • ${c.state_code} ${c.state_top_tax_rate_pct}% max tax` : ''})
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
             {retireCity && <span className="fs-hint">{retireCity.tagline}</span>}
           </div>
+
+          {isCrossBorder && currentCity && retireCity && (
+            <div className="fs-crossborder-note" role="status">
+              🌐 <strong>Cross-Border Move ({currentCity.country} → {retireCity.country}):</strong> Accumulation stays
+              in {sym} using {input.country === 'US' ? '401(k)/Roth' : 'EPF/PPF/NPS'} rules. At Age{' '}
+              {input.retirement_age}, expenses convert at <strong>1 USD = ₹85</strong> using{' '}
+              {retireCity.country === 'US'
+                ? `${retireCity.name} (${retireCity.state_code}) taxes & ACA/Medicare.`
+                : `${retireCity.name} India taxes & Family Floater healthcare.`}
+            </div>
+          )}
 
           {input.current_city_id !== input.retirement_city_id && (
             <div className="fs-checkbox-row">
@@ -195,33 +299,48 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
 
         {/* CORPUS, SAVINGS & LIFESTYLE */}
         <fieldset className="fs-fieldset">
-          <legend className="fs-legend">2. Corpus, Savings &amp; Lifestyle</legend>
-
-          <div className="fs-field">
-            <div className="fs-label-split">
-              <label htmlFor="fs-corpus">Current Investable Corpus ({sym})</label>
-              <strong className="fs-val-callout">{formatMoneyCompact(input.current_corpus, input.country)}</strong>
-            </div>
-            <BufferedNumberInput
-              id="fs-corpus"
-              name="current_corpus"
-              step={corpusStep}
-              min={0}
-              value={Math.round(input.current_corpus)}
-              onCommit={(val) =>
-                update({
-                  current_corpus: val,
-                  buckets: { ...input.buckets, use_granular: false },
-                })
-              }
-            />
+          <div className="fs-legend-split">
+            <legend className="fs-legend">2. Corpus, Retirement Funds &amp; Lifestyle</legend>
+            <strong className="fs-val-callout">
+              Total {formatMoneyCompact(liquidCorpus + lockedCorpus, input.country)}
+            </strong>
           </div>
 
           <div className="fs-field-row-2">
             <div className="fs-field">
-              <div className="fs-label-split">
-                <label htmlFor="fs-savings">Monthly SIP / Save</label>
-              </div>
+              <label htmlFor="fs-liquid-corpus">
+                Liquid Corpus ({input.country === 'IN' ? 'MF / Debt / FD' : 'Brokerage / Cash'})
+              </label>
+              <BufferedNumberInput
+                id="fs-liquid-corpus"
+                name="liquid_corpus"
+                step={corpusStep}
+                min={0}
+                value={liquidCorpus}
+                onCommit={setLiquidCorpusTotal}
+              />
+              <span className="fs-hint">{formatMoneyCompact(liquidCorpus, input.country)} spendable pre-60</span>
+            </div>
+
+            <div className="fs-field">
+              <label htmlFor="fs-locked-corpus">
+                Age-60 Retirement Funds ({input.country === 'IN' ? 'EPF / PPF / NPS' : '401k / IRA / Roth'})
+              </label>
+              <BufferedNumberInput
+                id="fs-locked-corpus"
+                name="locked_corpus"
+                step={corpusStep}
+                min={0}
+                value={lockedCorpus}
+                onCommit={setLockedCorpusTotal}
+              />
+              <span className="fs-hint">{formatMoneyCompact(lockedCorpus, input.country)} unlocks ~Age 60</span>
+            </div>
+          </div>
+
+          <div className="fs-field-row-2">
+            <div className="fs-field">
+              <label htmlFor="fs-savings">Monthly Liquid SIP / Save</label>
               <BufferedNumberInput
                 id="fs-savings"
                 name="monthly_savings"
@@ -230,9 +349,26 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 value={Math.round(input.monthly_savings)}
                 onCommit={(v) => update({ monthly_savings: v })}
               />
-              <span className="fs-hint">{formatMoneyCompact(input.monthly_savings, input.country)}/mo</span>
+              <span className="fs-hint">{formatMoneyCompact(input.monthly_savings, input.country)}/mo liquid</span>
             </div>
 
+            <div className="fs-field">
+              <label htmlFor="fs-locked-savings">
+                Monthly {input.country === 'IN' ? 'EPF / VPF / NPS' : '401(k) / Roth'}
+              </label>
+              <BufferedNumberInput
+                id="fs-locked-savings"
+                name="monthly_locked_savings"
+                step={savingsStep}
+                min={0}
+                value={lockedSavings}
+                onCommit={(v) => update({ monthly_locked_savings: v })}
+              />
+              <span className="fs-hint">{formatMoneyCompact(lockedSavings, input.country)}/mo age-60</span>
+            </div>
+          </div>
+
+          <div className="fs-field-row-2">
             <div className="fs-field">
               <label htmlFor="fs-stepup">Annual Step-Up %</label>
               <BufferedNumberInput
@@ -245,6 +381,14 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 onCommit={(v) => update({ annual_savings_step_up: v / 100 })}
               />
               <span className="fs-hint">Career SIP growth/yr</span>
+            </div>
+            <div className="fs-field">
+              <span className="fs-group-label">Combined Monthly Save</span>
+              <div className="fs-summary-box">
+                <strong>{formatMoneyCompact(input.monthly_savings + lockedSavings, input.country)}</strong>
+                <small>/mo total</small>
+              </div>
+              <span className="fs-hint">Fine-tune splits in 2B</span>
             </div>
           </div>
 
@@ -382,9 +526,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.taxable_equity)}
                       onCommit={(v) =>
-                        update({
-                          buckets: { ...input.buckets, taxable_equity: v },
-                        })
+                        updateBucketsAndCorpus({ ...input.buckets, taxable_equity: v })
                       }
                     />
                   </div>
@@ -399,9 +541,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.taxable_debt_cash)}
                       onCommit={(v) =>
-                        update({
-                          buckets: { ...input.buckets, taxable_debt_cash: v },
-                        })
+                        updateBucketsAndCorpus({ ...input.buckets, taxable_debt_cash: v })
                       }
                     />
                   </div>
@@ -416,9 +556,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.tax_deferred_locked)}
                       onCommit={(v) =>
-                        update({
-                          buckets: { ...input.buckets, tax_deferred_locked: v },
-                        })
+                        updateBucketsAndCorpus({ ...input.buckets, tax_deferred_locked: v })
                       }
                     />
                   </div>
@@ -433,9 +571,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.tax_free_account)}
                       onCommit={(v) =>
-                        update({
-                          buckets: { ...input.buckets, tax_free_account: v },
-                        })
+                        updateBucketsAndCorpus({ ...input.buckets, tax_free_account: v })
                       }
                     />
                   </div>
@@ -449,9 +585,7 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                         step={corpusStep / 2}
                         value={Math.round(input.buckets.pension_locked)}
                         onCommit={(v) =>
-                          update({
-                            buckets: { ...input.buckets, pension_locked: v },
-                          })
+                          updateBucketsAndCorpus({ ...input.buckets, pension_locked: v })
                         }
                       />
                     </div>

@@ -128,7 +128,11 @@ export const App: React.FC = () => {
       if (!input) return;
       switch (leverId) {
         case 'boost-savings-25':
-          setInput({ ...input, monthly_savings: Math.round(input.monthly_savings * 1.25) });
+          setInput({
+            ...input,
+            monthly_savings: Math.round(input.monthly_savings * 1.25),
+            monthly_locked_savings: Math.round((input.monthly_locked_savings || 0) * 1.25),
+          });
           break;
         case 'delay-retire-2yr':
           setInput({
@@ -276,7 +280,7 @@ export const App: React.FC = () => {
 
         <div className="fs-topbar-actions">
           {/* Country Toggle (2 options -> Radio per modern-web-guidance) */}
-          <div className="fs-segmented" role="radiogroup" aria-label="Country and tax jurisdiction">
+          <div className="fs-segmented" role="radiogroup" aria-label="Work portfolio currency and account jurisdiction">
             <label className={`fs-seg-option ${country === 'IN' ? 'active' : ''}`}>
               <input
                 type="radio"
@@ -285,7 +289,7 @@ export const App: React.FC = () => {
                 onChange={() => switchCountry('IN')}
                 className="visually-hidden"
               />
-              🇮🇳 India (₹ Cr/L)
+              🇮🇳 Work IN (₹ Cr/L)
             </label>
             <label className={`fs-seg-option ${country === 'US' ? 'active' : ''}`}>
               <input
@@ -295,7 +299,7 @@ export const App: React.FC = () => {
                 onChange={() => switchCountry('US')}
                 className="visually-hidden"
               />
-              🇺🇸 USA ($M/K)
+              🇺🇸 Work US ($M/K)
             </label>
           </div>
 
@@ -335,15 +339,22 @@ export const App: React.FC = () => {
               <div className="fs-kpi-sub">
                 Pre-60 Liquidity Safe: <strong>{analysis.liquidity_safe_rate.toFixed(1)}%</strong>
               </div>
+              <p className="fs-kpi-help">
+                % of 3,000 market simulations lasting to Age {input.horizon_age}; Liquidity Safe avoids dipping into
+                Age-60 funds early.
+              </p>
             </div>
 
             <div className="fs-kpi-card">
               <div className="fs-kpi-label">90%-Confidence FIRE Age</div>
               <div className="fs-kpi-val">Age {analysis.target_fire_age.toFixed(1)}</div>
               <div className="fs-kpi-sub">
-                Coast FIRE: <strong>Age {analysis.coast_fire_age.toFixed(1)}</strong> • Fortress:{' '}
+                Coast: <strong>{analysis.coast_fire_age.toFixed(1)}</strong> • Fortress:{' '}
                 <strong>{analysis.fortress_fire_age.toFixed(1)}</strong>
               </div>
+              <p className="fs-kpi-help">
+                Earliest age to retire with 90%+ odds. Coast = stop saving now &amp; retire at 60; Fortress = 97%+ safe.
+              </p>
             </div>
 
             <div className="fs-kpi-card">
@@ -358,6 +369,10 @@ export const App: React.FC = () => {
                 Real P10–P90: {formatMoneyCompact(analysis.corpus_at_fire_real_p10, country)} –{' '}
                 {formatMoneyCompact(analysis.corpus_at_fire_real_p90, country)}
               </div>
+              <p className="fs-kpi-help">
+                Expected {valueBasis === 'real' ? "today's value" : 'future nominal'} nest egg at FIRE (median P50,
+                with 10th–90th market range).
+              </p>
             </div>
 
             <div className="fs-kpi-card">
@@ -366,6 +381,10 @@ export const App: React.FC = () => {
               <div className="fs-kpi-sub">
                 Implied Initial Draw: <strong>{analysis.implied_initial_swr.toFixed(2)}% SWR</strong>
               </div>
+              <p className="fs-kpi-help">
+                Portfolio target at Age {input.retirement_age} for 90% success, and the Year-1 withdrawal rate your
+                budget implies.
+              </p>
             </div>
 
             <div className="fs-kpi-card">
@@ -375,6 +394,10 @@ export const App: React.FC = () => {
                 Terminal P50 @ {input.horizon_age}:{' '}
                 <strong>{formatMoneyCompact(analysis.terminal_real_p50, country)}</strong>
               </div>
+              <p className="fs-kpi-help">
+                Max inflation-adjusted monthly budget with 90% odds; Terminal P50 is median legacy wealth left at Age{' '}
+                {input.horizon_age}.
+              </p>
             </div>
           </section>
 
@@ -408,6 +431,10 @@ export const App: React.FC = () => {
             <CashFlowStreamChart
               bands={analysis.yearly_bands}
               country={country}
+              retireCountry={
+                metadata.cities.find((c) => c.id === input.retirement_city_id)?.country || country
+              }
+              retirementAge={input.retirement_age}
               liquidityWarningAge={analysis.liquidity_warning_age}
             />
           </div>

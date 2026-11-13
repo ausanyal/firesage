@@ -63,8 +63,14 @@ export const ReadinessFrontierChart: React.FC<ReadinessFrontierChartProps> = ({
         </div>
         {hovered && (
           <div className="fs-mini-stat">
-            <span>Age {hovered.retirement_age} Safe 90% Spend:</span>
-            <strong>{formatMoneyCompact(hovered.safe_monthly_spend_90, country)}/mo</strong>
+            <span>
+              Age {hovered.retirement_age} Safe Spend:{' '}
+              <strong>{formatMoneyCompact(hovered.safe_monthly_spend_90, country)}/mo</strong>
+            </span>
+            <strong>
+              {hovered.success_rate.toFixed(0)}% {geoArb.is_relocating ? `Move` : 'Survival'}
+              {geoArb.is_relocating ? ` vs ${hovered.stay_in_current_city_rate.toFixed(0)}% Stay` : ''}
+            </strong>
           </div>
         )}
       </div>
@@ -106,25 +112,52 @@ export const ReadinessFrontierChart: React.FC<ReadinessFrontierChartProps> = ({
                 y1={yAt(pct)}
                 y2={yAt(pct)}
                 stroke={pct === 90 ? '#10b981' : 'currentColor'}
-                strokeOpacity={pct === 90 ? 0.55 : 0.1}
-                strokeDasharray={pct === 90 ? '4 4' : undefined}
+                strokeOpacity={pct === 90 ? 0.65 : 0.1}
+                strokeWidth={pct === 90 ? 1.5 : 1}
+                strokeDasharray={pct === 90 ? '5 4' : undefined}
               />
               <text x={pad.left - 8} y={yAt(pct) + 4} textAnchor="end" className="fs-svg-axis">
                 {pct}%
               </text>
+              {pct === 90 && (
+                <text
+                  x={w - pad.right - 2}
+                  y={yAt(90) - 5}
+                  textAnchor="end"
+                  fill="#10b981"
+                  fontSize="10"
+                  fontWeight="700"
+                >
+                  90% Safe Target
+                </text>
+              )}
             </g>
           ))}
 
           <path d={areaPath} fill="url(#frontierGrad)" />
 
           {geoArb.is_relocating && (
-            <polyline
-              fill="none"
-              stroke="#94a3b8"
-              strokeWidth="1.8"
-              strokeDasharray="4 4"
-              points={stayPoints}
-            />
+            <>
+              <polyline
+                fill="none"
+                stroke="#94a3b8"
+                strokeWidth="2"
+                strokeDasharray="4 4"
+                points={stayPoints}
+              />
+              {frontier.length > 2 && (
+                <text
+                  x={xAt(Math.floor(frontier.length * 0.72))}
+                  y={Math.min(pad.top + plotH - 6, yAt(frontier[Math.floor(frontier.length * 0.72)].stay_in_current_city_rate) + 15)}
+                  textAnchor="middle"
+                  fill="#94a3b8"
+                  fontSize="9.5"
+                  fontWeight="600"
+                >
+                  Stay in {geoArb.current_city.name}
+                </text>
+              )}
+            </>
           )}
 
           <polyline fill="none" stroke="#10b981" strokeWidth="2.6" points={mainPoints} />
@@ -144,15 +177,27 @@ export const ReadinessFrontierChart: React.FC<ReadinessFrontierChartProps> = ({
               >
                 <rect x={cx - 8} y={pad.top} width={16} height={plotH} fill="transparent" />
                 {isSelected && (
-                  <line
-                    x1={cx}
-                    x2={cx}
-                    y1={pad.top}
-                    y2={pad.top + plotH}
-                    stroke="#f59e0b"
-                    strokeWidth="2"
-                    strokeDasharray="4 3"
-                  />
+                  <>
+                    <line
+                      x1={cx}
+                      x2={cx}
+                      y1={pad.top}
+                      y2={pad.top + plotH}
+                      stroke="#f59e0b"
+                      strokeWidth="2"
+                      strokeDasharray="4 3"
+                    />
+                    <text
+                      x={Math.min(w - pad.right - 34, Math.max(pad.left + 34, cx))}
+                      y={pad.top - 5}
+                      textAnchor="middle"
+                      fill="#f59e0b"
+                      fontSize="10"
+                      fontWeight="700"
+                    >
+                      Your Plan: Age {pt.retirement_age}
+                    </text>
+                  </>
                 )}
                 <circle
                   cx={cx}
@@ -169,6 +214,29 @@ export const ReadinessFrontierChart: React.FC<ReadinessFrontierChartProps> = ({
             );
           })}
         </svg>
+      </div>
+
+      {/* Explicit Line Key */}
+      <div className="fs-legend-row fs-frontier-legend">
+        <span>
+          <i style={{ background: '#10b981' }} />{' '}
+          {geoArb.is_relocating
+            ? `Retire in ${geoArb.comparison_city.name} (Active Plan)`
+            : `Survival Curve in ${geoArb.current_city.name}`}
+        </span>
+        {geoArb.is_relocating && (
+          <span>
+            <i style={{ background: 'transparent', borderTop: '2px dashed #94a3b8', height: '2px', borderRadius: 0 }} />{' '}
+            Gray Dotted: Baseline if Staying in {geoArb.current_city.name}
+          </span>
+        )}
+        <span>
+          <i style={{ background: 'transparent', borderTop: '2px dashed #10b981', height: '2px', borderRadius: 0 }} />{' '}
+          Green Dashed: 90% Safe Target
+        </span>
+        <span>
+          <i style={{ background: '#f59e0b' }} /> Amber Vertical: Selected Age ({retirementAge})
+        </span>
       </div>
 
       {/* Geo-Arbitrage Callout Footer */}
