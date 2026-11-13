@@ -187,6 +187,28 @@ var allCities = []CityProfile{
 		TypicalHomePrice: 19_500_000, // ₹1.95 Cr
 	},
 	{
+		ID:                     "in-kolkata",
+		Name:                   "Kolkata",
+		Region:                 "West Bengal",
+		Country:                CountryIndia,
+		Tier:                   "Tier 1",
+		Tagline:                "Cultural metro with India's lowest Tier-1 housing & living costs (Salt Lake / New Town / South Kolkata) + major multi-specialty hospitals",
+		CostOfLivingIndex:      0.76,
+		HousingCostIndex:       0.62,
+		HealthcareCostMult:     0.90,
+		TertiaryMedicalBuffer:  0,
+		StateCode:              "WB",
+		StateTopTaxRateDisplay: 0.0,
+		PropertyTaxRate:        0.0020,
+		MonthlyPresets: LifestylePresets{
+			Lean:     55_000,
+			Standard: 105_000,
+			Chubby:   195_000,
+			Fat:      370_000,
+		},
+		TypicalHomePrice: 13_500_000, // ₹1.35 Cr
+	},
+	{
 		ID:                     "in-goa",
 		Name:                   "Goa (Panaji / Porvorim / North)",
 		Region:                 "Goa",

@@ -627,8 +627,8 @@ export const App: React.FC = () => {
               &amp; Gold + Shiller CAPE (P/E10) &amp; BLS Headline/Medical CPI.
               <br />
               <strong>India (1980–2025):</strong> BSE Sensex / NSE Nifty 50 TRI, RBI 10Y GoI G-Sec &amp; 91d T-Bill, INR
-              Gold, MoSPI CPI-Combined + 11%–14% Indian Medical CPI (incl. Dehradun, Kodaikanal &amp; Kochi/Cochin Zone
-              &amp; hill-station tertiary travel buffers).
+              Gold, MoSPI CPI-Combined + 11%–14% Indian Medical CPI (incl. Kolkata, Dehradun, Kodaikanal &amp;
+              Kochi/Cochin Zone &amp; hill-station tertiary travel buffers).
               <br />
               <strong>Australia (1980–2025):</strong> S&amp;P/ASX 200 Accumulation Index (incl. franked dividend yield),
               RBA 10Y Commonwealth Govt Bonds &amp; Cash Rate, AUD Gold, ABS CPI &amp; AIHW Health CPI.

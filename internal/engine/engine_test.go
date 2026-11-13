@@ -246,8 +246,8 @@ func TestGlobalJurisdictionsAustraliaEuropeNZAndNewIndianCities(t *testing.T) {
 		t.Fatalf("expected NZ KiwiSaver to unlock completely at age 65, got LockedRealP50=%.0f", resNZ.YearlyBands[idx65].LockedRealP50)
 	}
 
-	// 4. New Indian Cities: Dehradun, Kodaikanal, Kochi (Cochin) + Cross-Border India -> Portugal
-	for _, cityID := range []string{"in-dehradun", "in-kodaikanal", "in-kochi"} {
+	// 4. New Indian Cities: Kolkata, Dehradun, Kodaikanal, Kochi (Cochin)
+	for _, cityID := range []string{"in-kolkata", "in-dehradun", "in-kodaikanal", "in-kochi"} {
 		inCityPlan := DefaultCountryTemplate(data.CountryIndia)
 		inCityPlan.RetirementCityID = cityID
 		inCityPlan.NumPaths = 400
