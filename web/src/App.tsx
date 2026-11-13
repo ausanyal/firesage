@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CashFlowStreamChart } from './components/CashFlowStreamChart';
+import { FireCopilotDrawer } from './components/FireCopilotDrawer';
 import { InputControlRail } from './components/InputControlRail';
 import { InsightsAndStressGrid } from './components/InsightsAndStressGrid';
 import { LightDismissDialog } from './components/LightDismissDialog';
@@ -11,11 +12,14 @@ import {
   type CountryCode,
   type FullAnalysisResponse,
   isValidCountry,
+  type LabTabId,
   type MetadataResponse,
+  type PersonaMode,
   type PlanInput,
   type SampleTrajectory,
   type SavedPlanRecord,
   SUPPORTED_COUNTRIES,
+  type UICommand,
 } from './types';
 import { COUNTRY_META, formatMoneyCompact, formatMoneyFull } from './utils/format';
 
@@ -35,13 +39,20 @@ export const App: React.FC = () => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
 
-  // Modals
+  // Modals & Copilot Drawer
   const [selectedTraj, setSelectedTraj] = useState<SampleTrajectory | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
   const [savedPlans, setSavedPlans] = useState<SavedPlanRecord[]>([]);
   const [saveName, setSaveName] = useState('');
   const [shareCopied, setShareCopied] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [labTab, setLabTab] = useState<LabTabId>('levers');
+  const [copilotReq, setCopilotReq] = useState<{
+    id: number;
+    prompt: string;
+    mode?: PersonaMode;
+  } | null>(null);
 
   const latestReqSeq = useRef(0);
 
@@ -241,6 +252,81 @@ export const App: React.FC = () => {
     setTimeout(() => setShareCopied(false), 2200);
   };
 
+  const launchCopilotWithPrompt = useCallback((prompt: string, mode?: PersonaMode) => {
+    setChatOpen(true);
+    setCopilotReq({ id: Date.now(), prompt, mode });
+  }, []);
+
+  const handleExecuteUICommands = useCallback(
+    (commands: UICommand[]): string[] => {
+      const steps: string[] = [];
+      for (const cmd of commands) {
+        switch (cmd.cmd) {
+          case 'APPLY_PLAN_PATCH':
+            if (cmd.plan_input) {
+              setInput(cmd.plan_input);
+              steps.push(cmd.reason || 'Updated live retirement plan parameters');
+            }
+            break;
+          case 'SET_VALUE_BASIS':
+            if (cmd.basis === 'real' || cmd.basis === 'nominal') {
+              setValueBasis(cmd.basis);
+              steps.push(cmd.reason || `Switched chart valuation basis to ${cmd.basis}`);
+            }
+            break;
+          case 'OPEN_AUTOPSY':
+            if (analysis && analysis.sample_paths.length > 0) {
+              const targetLbl = (cmd.path_label || 'Worst Path').toLowerCase();
+              const matched =
+                analysis.sample_paths.find((p) => p.label.toLowerCase().includes(targetLbl)) ||
+                analysis.sample_paths[0];
+              setSelectedTraj(matched);
+              steps.push(cmd.reason || `Opened Trajectory Autopsy (${matched.label})`);
+            }
+            break;
+          case 'OPEN_LAB_TAB':
+            if (cmd.tab) {
+              setLabTab(cmd.tab);
+              setTimeout(() => {
+                document.getElementById('fs-battle-lab')?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }, 80);
+              steps.push(cmd.reason || `Switched Battle-Test Lab tab to ${cmd.tab}`);
+            }
+            break;
+          case 'SCROLL_TO_SECTION': {
+            const sectionMap: Record<string, string> = {
+              'kpi-strip': 'fs-kpi-strip',
+              'wealth-cone': 'fs-wealth-cone',
+              frontier: 'fs-frontier',
+              'cashflow-bridge': 'fs-cashflow-bridge',
+              'battle-lab': 'fs-battle-lab',
+            };
+            const domId = sectionMap[cmd.section || ''] || cmd.section || '';
+            if (domId) {
+              setTimeout(() => {
+                document.getElementById(domId)?.scrollIntoView({
+                  behavior: 'smooth',
+                  block: 'start',
+                });
+              }, 80);
+              steps.push(cmd.reason || `Scrolled dashboard to ${cmd.section}`);
+            }
+            break;
+          }
+          case 'OPEN_METHODOLOGY':
+            setSourcesOpen(true);
+            steps.push(cmd.reason || 'Opened Quantitative Methodology & Tax Sources');
+            break;
+        }
+      }
+      return steps;
+    },
+    [analysis],
+  );
+
   if (!metadata || !input || !analysis) {
     return (
       <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh', padding: '2rem' }}>
@@ -317,6 +403,16 @@ export const App: React.FC = () => {
 
           <button
             type="button"
+            className={`fs-btn fs-copilot-topbtn ${chatOpen ? 'active' : ''}`}
+            aria-expanded={chatOpen}
+            onClick={() => setChatOpen((v) => !v)}
+          >
+            <span className="fs-copilot-dot" aria-hidden="true" />
+            💬 FIRE Chat
+          </button>
+
+          <button
+            type="button"
             className="fs-btn"
             onClick={toggleTheme}
             aria-label={isDark ? 'Switch to light color scheme' : 'Switch to dark color scheme'}
@@ -337,7 +433,7 @@ export const App: React.FC = () => {
 
         <div className="fs-main-canvas">
           {/* EXECUTIVE TELEMETRY KPI STRIP */}
-          <div className="fs-kpi-grid">
+          <div id="fs-kpi-strip" className="fs-kpi-grid">
             <div className="fs-kpi-card">
               <div className="fs-kpi-label">Plan Survival (Age {input.horizon_age})</div>
               <div className={`fs-kpi-val ${successTone}`}>{analysis.success_rate.toFixed(1)}%</div>
@@ -407,53 +503,112 @@ export const App: React.FC = () => {
             </div>
           </div>
 
+          {/* AGENTIC COPILOT QUICK-LAUNCH STRIP (Mirrors StockSage Verdict Bar) */}
+          <div className="fs-copilot-launchbar">
+            <div className="fs-copilot-launchinfo">
+              <span className="fs-badge fs-badge-emerald">🧠 Agentic Planner + Tools</span>
+              <span>
+                Ask <strong>FIRE Quant Copilot</strong> to compare 34 global cities, solve your 90% SIP, or drive
+                sliders &amp; stress tests live.
+              </span>
+            </div>
+            <div className="fs-copilot-launchbtns">
+              <button
+                type="button"
+                className="fs-btn fs-btn-secondary"
+                onClick={() =>
+                  launchCopilotWithPrompt(
+                    'Audit my retirement plan, pre-unlock liquidity bridge, and rank my top action levers.',
+                    'analyst',
+                  )
+                }
+              >
+                🧠 Deep-Dive in FIRE Copilot &rsaquo;
+              </button>
+              <button
+                type="button"
+                className="fs-btn"
+                onClick={() =>
+                  launchCopilotWithPrompt(
+                    'Run a Retirement Committee Bull vs. Bear debate on my current plan.',
+                    'debate',
+                  )
+                }
+              >
+                ⚔️ Bull vs. Bear
+              </button>
+              <button
+                type="button"
+                className="fs-btn"
+                onClick={() =>
+                  launchCopilotWithPrompt(
+                    'Run a Chief Risk Officer pre-mortem stress test on my retirement plan.',
+                    'devil',
+                  )
+                }
+              >
+                🦈 Pre-Mortem
+              </button>
+            </div>
+          </div>
+
           {/* HERO CHART 1: STOCHASTIC WEALTH CONE & DRAGGABLE PLAYHEAD */}
-          <WealthConeChart
-            bands={analysis.yearly_bands}
-            samplePaths={analysis.sample_paths}
-            country={country}
-            retirementAge={input.retirement_age}
-            valueBasis={valueBasis}
-            onChangeValueBasis={setValueBasis}
-            onScrubRetirementAge={(newAge) => setInput({ ...input, retirement_age: newAge })}
-            onSelectTrajectory={setSelectedTraj}
-            isDark={isDark}
-          />
-
-          {/* CHARTS 2 & 3 SIDE-BY-SIDE: READINESS FRONTIER + LIFESPAN CASH-FLOW STREAM */}
-          <div className="fs-dual-charts">
-            <ReadinessFrontierChart
-              frontier={analysis.frontier}
-              country={country}
-              retirementAge={input.retirement_age}
-              coastAge={analysis.coast_fire_age}
-              leanAge={analysis.lean_fire_age}
-              targetAge={analysis.target_fire_age}
-              fortressAge={analysis.fortress_fire_age}
-              geoArb={analysis.geo_arbitrage}
-              onSelectAge={(age) => setInput({ ...input, retirement_age: age })}
-            />
-
-            <CashFlowStreamChart
+          <div id="fs-wealth-cone">
+            <WealthConeChart
               bands={analysis.yearly_bands}
+              samplePaths={analysis.sample_paths}
               country={country}
-              retireCountry={
-                metadata.cities.find((c) => c.id === input.retirement_city_id)?.country || country
-              }
               retirementAge={input.retirement_age}
-              liquidityWarningAge={analysis.liquidity_warning_age}
+              valueBasis={valueBasis}
+              onChangeValueBasis={setValueBasis}
+              onScrubRetirementAge={(newAge) => setInput({ ...input, retirement_age: newAge })}
+              onSelectTrajectory={setSelectedTraj}
+              isDark={isDark}
             />
           </div>
 
+          {/* CHARTS 2 & 3 SIDE-BY-SIDE: READINESS FRONTIER + LIFESPAN CASH-FLOW STREAM */}
+          <div className="fs-dual-charts">
+            <div id="fs-frontier">
+              <ReadinessFrontierChart
+                frontier={analysis.frontier}
+                country={country}
+                retirementAge={input.retirement_age}
+                coastAge={analysis.coast_fire_age}
+                leanAge={analysis.lean_fire_age}
+                targetAge={analysis.target_fire_age}
+                fortressAge={analysis.fortress_fire_age}
+                geoArb={analysis.geo_arbitrage}
+                onSelectAge={(age) => setInput({ ...input, retirement_age: age })}
+              />
+            </div>
+
+            <div id="fs-cashflow-bridge">
+              <CashFlowStreamChart
+                bands={analysis.yearly_bands}
+                country={country}
+                retireCountry={
+                  metadata.cities.find((c) => c.id === input.retirement_city_id)?.country || country
+                }
+                retirementAge={input.retirement_age}
+                liquidityWarningAge={analysis.liquidity_warning_age}
+              />
+            </div>
+          </div>
+
           {/* CHARTS 4, 5, 6 & 7: ACTION LEVERS, HISTORICAL CRISES, GUARDRAILS & SRR MATRIX */}
-          <InsightsAndStressGrid
-            country={country}
-            bands={analysis.yearly_bands}
-            crises={analysis.crisis_replays}
-            srrHeatmap={analysis.srr_heatmap}
-            levers={analysis.action_levers}
-            onApplyLever={handleApplyLever}
-          />
+          <div id="fs-battle-lab">
+            <InsightsAndStressGrid
+              country={country}
+              bands={analysis.yearly_bands}
+              crises={analysis.crisis_replays}
+              srrHeatmap={analysis.srr_heatmap}
+              levers={analysis.action_levers}
+              onApplyLever={handleApplyLever}
+              activeTab={labTab}
+              onTabChange={setLabTab}
+            />
+          </div>
 
           <footer className="fs-status-footer">
             <span>
@@ -689,6 +844,29 @@ export const App: React.FC = () => {
           </div>
         </div>
       </LightDismissDialog>
+      {/* FLOATING COPILOT LAUNCHER PILL (WHEN DRAWER IS CLOSED) */}
+      {!chatOpen && (
+        <button
+          type="button"
+          className="fs-copilot-fab"
+          onClick={() => setChatOpen(true)}
+        >
+          <span className="fs-copilot-dot" aria-hidden="true" />
+          💬 Ask FIRE Copilot
+        </button>
+      )}
+
+      {/* AGENTIC FIRE QUANT COPILOT DRAWER */}
+      <FireCopilotDrawer
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        input={input}
+        analysis={analysis}
+        cities={metadata.cities}
+        valueBasis={valueBasis}
+        onExecuteUICommands={handleExecuteUICommands}
+        externalPromptRequest={copilotReq}
+      />
     </div>
   );
 };

@@ -7,6 +7,7 @@ declare const self: DedicatedWorkerGlobalScope & {
   };
   firesageGetMetadata?: () => string;
   firesageRunAnalysis?: (inputJson: string) => string;
+  firesageRunChat?: (reqJson: string) => string;
 };
 
 let initPromise: Promise<void> | null = null;
@@ -55,7 +56,11 @@ async function ensureWasmReady(): Promise<void> {
 
     // Wait briefly until global functions are registered
     for (let i = 0; i < 50; i++) {
-      if (typeof self.firesageGetMetadata === 'function' && typeof self.firesageRunAnalysis === 'function') {
+      if (
+        typeof self.firesageGetMetadata === 'function' &&
+        typeof self.firesageRunAnalysis === 'function' &&
+        typeof self.firesageRunChat === 'function'
+      ) {
         return;
       }
       await new Promise((r) => setTimeout(r, 10));
@@ -66,27 +71,38 @@ async function ensureWasmReady(): Promise<void> {
   return initPromise;
 }
 
-self.addEventListener('message', async (event: MessageEvent<{ id: number; type: 'metadata' | 'analyze'; payload?: string }>) => {
-  const { id, type, payload } = event.data;
-  try {
-    await ensureWasmReady();
-    if (type === 'metadata') {
-      const jsonStr = self.firesageGetMetadata!();
-      self.postMessage({ id, ok: true, data: JSON.parse(jsonStr) });
-    } else if (type === 'analyze') {
-      const jsonStr = self.firesageRunAnalysis!(payload || '{}');
-      const parsed = JSON.parse(jsonStr);
-      if (parsed && parsed.error) {
-        self.postMessage({ id, ok: false, error: parsed.error });
-      } else {
-        self.postMessage({ id, ok: true, data: parsed });
+self.addEventListener(
+  'message',
+  async (event: MessageEvent<{ id: number; type: 'metadata' | 'analyze' | 'chat'; payload?: string }>) => {
+    const { id, type, payload } = event.data;
+    try {
+      await ensureWasmReady();
+      if (type === 'metadata') {
+        const jsonStr = self.firesageGetMetadata!();
+        self.postMessage({ id, ok: true, data: JSON.parse(jsonStr) });
+      } else if (type === 'analyze') {
+        const jsonStr = self.firesageRunAnalysis!(payload || '{}');
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && parsed.error) {
+          self.postMessage({ id, ok: false, error: parsed.error });
+        } else {
+          self.postMessage({ id, ok: true, data: parsed });
+        }
+      } else if (type === 'chat') {
+        const jsonStr = self.firesageRunChat!(payload || '{}');
+        const parsed = JSON.parse(jsonStr);
+        if (parsed && parsed.error) {
+          self.postMessage({ id, ok: false, error: parsed.error });
+        } else {
+          self.postMessage({ id, ok: true, data: parsed });
+        }
       }
+    } catch (err) {
+      self.postMessage({
+        id,
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
-  } catch (err) {
-    self.postMessage({
-      id,
-      ok: false,
-      error: err instanceof Error ? err.message : String(err),
-    });
-  }
-});
+  },
+);

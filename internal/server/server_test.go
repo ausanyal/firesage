@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/ausanyal/firesage/internal/copilot"
 	"github.com/ausanyal/firesage/internal/data"
 	"github.com/ausanyal/firesage/internal/engine"
 )
@@ -101,5 +102,28 @@ func TestHTTPServerEndpointsEndToEnd(t *testing.T) {
 	mux.ServeHTTP(recSPA, reqSPA)
 	if recSPA.Code != http.StatusOK {
 		t.Fatalf("GET / status = %d, want 200", recSPA.Code)
+	}
+
+	// 7. POST /api/v1/chat runs Stage 1 Planner + Stage 2 Quantitative Tools + Stage 3 Synthesis
+	chatReqObj := copilot.ChatRequest{
+		Question:   "Compare retiring in Bengaluru vs Kolkata vs Algarve and solve required SIP for 90% survival",
+		Mode:       "analyst",
+		Input:      plan,
+		ValueBasis: "real",
+	}
+	chatBytes, _ := json.Marshal(chatReqObj)
+	reqChat := httptest.NewRequest(http.MethodPost, "/api/v1/chat", bytes.NewReader(chatBytes))
+	reqChat.Header.Set("Content-Type", "application/json")
+	recChat := httptest.NewRecorder()
+	mux.ServeHTTP(recChat, reqChat)
+	if recChat.Code != http.StatusOK {
+		t.Fatalf("POST /api/v1/chat status = %d, body = %s", recChat.Code, recChat.Body.String())
+	}
+	var chatResp copilot.ChatResponse
+	if err := json.Unmarshal(recChat.Body.Bytes(), &chatResp); err != nil {
+		t.Fatalf("unmarshal ChatResponse failed: %v", err)
+	}
+	if !chatResp.OK || len(chatResp.Plan.Steps) != 3 || len(chatResp.ToolTrace) < 3 || chatResp.Markdown == "" {
+		t.Fatalf("unexpected ChatResponse: %+v", chatResp)
 	}
 }

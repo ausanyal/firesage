@@ -15,6 +15,7 @@ func NewMux() http.Handler {
 	mux.HandleFunc("GET /api/v1/health", handleHealth)
 	mux.HandleFunc("GET /api/v1/metadata", handleMetadata)
 	mux.HandleFunc("POST /api/v1/analyze", handleAnalyze)
+	mux.HandleFunc("POST /api/v1/chat", handleChat)
 
 	// Embedded React/TypeScript SPA handler with client-side route fallback
 	mux.Handle("/", newSPAHandler())

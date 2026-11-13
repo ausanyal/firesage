@@ -3,6 +3,7 @@ import type {
   ActionLever,
   CountryCode,
   CrisisReplayOutcome,
+  LabTabId,
   SRRCell,
   YearBand,
 } from '../types';
@@ -15,6 +16,8 @@ interface InsightsAndStressGridProps {
   srrHeatmap: SRRCell[];
   levers: ActionLever[];
   onApplyLever: (leverId: string) => void;
+  activeTab?: LabTabId;
+  onTabChange?: (tab: LabTabId) => void;
 }
 
 export const InsightsAndStressGrid: React.FC<InsightsAndStressGridProps> = ({
@@ -24,8 +27,15 @@ export const InsightsAndStressGrid: React.FC<InsightsAndStressGridProps> = ({
   srrHeatmap,
   levers,
   onApplyLever,
+  activeTab: controlledTab,
+  onTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'levers' | 'crises' | 'guardrails' | 'srr'>('levers');
+  const [internalTab, setInternalTab] = useState<LabTabId>('levers');
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: LabTabId) => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
 
   const retiredBands = bands.filter((b) => b.is_retired);
 

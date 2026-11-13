@@ -266,3 +266,95 @@ export interface SavedPlanRecord {
   updated_at: string;
   input: PlanInput;
 }
+
+export type LabTabId = 'levers' | 'crises' | 'guardrails' | 'srr';
+export type PersonaMode = 'analyst' | 'eli5' | 'debate' | 'devil';
+
+export interface PlanStep {
+  step: number;
+  title: string;
+  detail: string;
+  status: string;
+}
+
+export interface PlannerExecutionPlan {
+  thought_summary: string;
+  steps: PlanStep[];
+  hypotheses: string[];
+  skills_invoked: string[];
+  planned_tools: string[];
+}
+
+export interface ToolCallTrace {
+  id: string;
+  tool: string;
+  args_summary: string;
+  duration_ms: number;
+  status: string;
+  summary: string;
+}
+
+export interface UICommand {
+  cmd:
+    | 'APPLY_PLAN_PATCH'
+    | 'SET_VALUE_BASIS'
+    | 'OPEN_AUTOPSY'
+    | 'OPEN_LAB_TAB'
+    | 'SCROLL_TO_SECTION'
+    | 'OPEN_METHODOLOGY';
+  reason: string;
+  country?: CountryCode;
+  basis?: 'real' | 'nominal';
+  path_label?: string;
+  tab?: LabTabId;
+  section?: string;
+  plan_input?: PlanInput;
+}
+
+export interface CopilotAction {
+  label: string;
+  prompt?: string;
+  ui_command?: UICommand;
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface ChatRequest {
+  question: string;
+  mode: PersonaMode;
+  input: PlanInput;
+  value_basis: 'real' | 'nominal';
+  history: ChatTurn[];
+  api_key?: string;
+  model?: string;
+}
+
+export interface ChatResponse {
+  ok: boolean;
+  engine_label: string;
+  used_llm: boolean;
+  llm_note?: string;
+  plan: PlannerExecutionPlan;
+  tool_trace: ToolCallTrace[];
+  ui_commands: UICommand[];
+  evidence_pack: string;
+  markdown: string;
+  actions: CopilotAction[];
+}
+
+export interface CopilotMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  engineLabel?: string;
+  usedLLM?: boolean;
+  llmNote?: string;
+  plan?: PlannerExecutionPlan;
+  toolTrace?: ToolCallTrace[];
+  executedUISteps?: string[];
+  actions?: CopilotAction[];
+}

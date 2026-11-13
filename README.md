@@ -30,7 +30,8 @@
    - [🇪🇺 Europe & Switzerland (`€` EUR — 8 Hubs across 6 Tax Sub-Jurisdictions)](#44--europe--switzerland--eur--8-hubs)
    - [🇳🇿 New Zealand (`NZ$` NZD — 4 Cities)](#45--new-zealand-nz-nzd--4-cities)
 5. [Stochastic Simulation Modes & Historical Crisis Cohorts](#5-stochastic-simulation-modes--historical-crisis-cohorts)
-6. [Local Development & Google Cloud Run Deployment](#6-local-development--google-cloud-run-deployment)
+6. [Agentic FIRE Quant Copilot (3-Stage Planner, Tool Calls & Page Driver)](#6-agentic-fire-quant-copilot-3-stage-planner-tool-calls--page-driver)
+7. [Local Development & Google Cloud Run Deployment](#7-local-development--google-cloud-run-deployment)
 
 ---
 
@@ -296,7 +297,22 @@ $$
 
 ---
 
-## 6. Local Development & Google Cloud Run Deployment
+## 6. Agentic FIRE Quant Copilot (3-Stage Planner, Tool Calls & Page Driver)
+
+FireSage includes a built-in **Deliberative Agentic Copilot (`💬 FIRE Chat` / `💬 Ask FIRE Copilot`)** modeled on StockSage's institutional 3-stage quantitative agent architecture (`internal/copilot/` + `internal/server/chat.go` + WASM `firesageRunChat`):
+
+1. **Stage 1 — Strategic Planner, Falsifiable Hypotheses & Bi-Directional Page Driver:**
+   - Parses multi-currency values (`₹ Cr / L`, `$`, `A$`, `€`, `NZ$`), city aliases across all **34 global hubs**, explicit UI mutations vs. `"What-If"` explorations, and 7 attached specialist skills (`skill_page_driver`, `skill_monte_carlo_srr`, `skill_geo_arbitrage_scanner`, `skill_goal_seek_solver`, `skill_crisis_stress_tester`, `skill_life_events_architect`, `skill_liquidity_tax_bridge`).
+   - Formulates **3 falsifiable actuarial hypotheses (`H1`–`H3`)** and dispatches live **UI Page-Driver commands (`ui_commands`)** that automatically update `PlanInput` sliders/cities (`APPLY_PLAN_PATCH`), switch valuation basis (`SET_VALUE_BASIS`), open the Year-by-Year Trajectory Autopsy (`OPEN_AUTOPSY`), switch Battle-Test Lab tabs (`OPEN_LAB_TAB`), or scroll to dashboard sections (`SCROLL_TO_SECTION`).
+2. **Stage 2 — Parallel Go Stochastic Engine Tool Executor:**
+   - Executes real Go quantitative simulations in parallel (`audit_plan_telemetry`, `update_live_plan_parameters`, parallel goroutine `compare_cities_geo_arbitrage`, CRN bisection `solve_goal_seek_targets`, `run_stress_and_crisis_shock`, `simulate_life_event`, and `audit_tax_and_liquidity_bridge`) — recording exact execution latency (`ms`) and telemetry in an expandable **`🧠 Deliberative Planner, Hypotheses & Tool Trace`** disclosure card.
+3. **Stage 3 — Persona-Aware Deep Reasoner & Institutional Memo Export:**
+   - Synthesizes grounded responses across **4 Persona Modes** (`🧠 Deep Planner`, `👶 ELI5`, `⚔️ Bull vs. Bear`, `🦈 Devil's Advocate`) using **Zero-Key Cloud Run Vertex AI (`gemini-2.5-flash` / `gemini-2.5-pro`)**, an optional browser-stored Gemini API key, or **100% offline Go/WASM deterministic synthesis**.
+   - Includes **1-click scenario mutation chips** and **`📥 Memo`** export (`FireSage_Retirement_Memo_<Country>_Age<RetireAge>_<Date>.md`) bundling live KPIs, ranked levers, historical crisis replays, and the full Copilot Q&A transcript.
+
+---
+
+## 7. Local Development & Google Cloud Run Deployment
 
 ### Prerequisites
 - **Go 1.24+**

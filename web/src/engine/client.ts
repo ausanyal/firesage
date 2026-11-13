@@ -1,4 +1,10 @@
-import type { FullAnalysisResponse, MetadataResponse, PlanInput } from '../types';
+import type {
+  ChatRequest,
+  ChatResponse,
+  FullAnalysisResponse,
+  MetadataResponse,
+  PlanInput,
+} from '../types';
 
 export type ExecutionBackend = 'go-cloud-api' | 'go-local-wasm';
 
@@ -30,7 +36,7 @@ function getWasmWorker(): Worker {
   return workerInstance;
 }
 
-function callWasmWorker<T>(type: 'metadata' | 'analyze', payload?: string): Promise<T> {
+function callWasmWorker<T>(type: 'metadata' | 'analyze' | 'chat', payload?: string): Promise<T> {
   const worker = getWasmWorker();
   const id = nextReqId++;
   return new Promise<T>((resolve, reject) => {
@@ -100,4 +106,83 @@ export async function runSimulationAnalysis(
 
   const result = await callWasmWorker<FullAnalysisResponse>('analyze', JSON.stringify(tunedInput));
   return { result, backend: 'go-local-wasm' };
+}
+
+export async function runCopilotChat(
+  req: ChatRequest,
+): Promise<{ result: ChatResponse; backend: ExecutionBackend }> {
+  const backend = await detectBackend();
+  if (backend === 'go-cloud-api') {
+    const resp = await fetch('/api/v1/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (resp.ok) {
+      return { result: (await resp.json()) as ChatResponse, backend };
+    }
+  }
+
+  // Offline / Local-First WASM Planner + Parallel Quantitative Tool Execution
+  const wasmResult = await callWasmWorker<ChatResponse>('chat', JSON.stringify(req));
+
+  // If user configured an optional Gemini API Key while running in pure Local-First WASM mode,
+  // run Stage 3 Deep Reasoner directly from the browser over the WASM EvidencePack!
+  const apiKey = (req.api_key || '').trim();
+  if (apiKey) {
+    try {
+      const model = (req.model || 'gemini-2.5-flash').trim();
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const prompt = [
+        `You are FIRE Copilot — FireSage's Stage 3 Deliberative Quantitative Retirement Strategist (Mode: ${req.mode}).`,
+        `GROUNDING RULE: Cite ONLY exact figures from the [EXECUTED GO QUANTITATIVE TOOL EVIDENCE PACK] below. Format concisely in Markdown (headings, bullets, compact tables) and append 'FOLLOW_UPS: Q1? | Q2? | Q3?' on the final line.`,
+        '',
+        `[EXECUTED GO QUANTITATIVE TOOL EVIDENCE PACK]`,
+        wasmResult.evidence_pack,
+        '',
+        `[USER QUESTION]: ${req.question}`,
+      ].join('\n');
+      const llmResp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.25, maxOutputTokens: 2048 },
+        }),
+      });
+      if (llmResp.ok) {
+        const data = await llmResp.json();
+        const parts: Array<{ text?: string; thought?: boolean }> =
+          data?.candidates?.[0]?.content?.parts || [];
+        let rawText = parts
+          .filter((p) => !p.thought && p.text)
+          .map((p) => p.text)
+          .join('')
+          .trim();
+        if (rawText) {
+          const fuMatch = rawText.match(/^FOLLOW_UPS:\s*(.+)$/im);
+          if (fuMatch) {
+            const followUps = fuMatch[1]
+              .split('|')
+              .map((s) => s.trim())
+              .filter(Boolean)
+              .slice(0, 3);
+            rawText = rawText.replace(/^FOLLOW_UPS:\s*(.+)$/im, '').trim();
+            const uiActions = (wasmResult.actions || []).filter((a) => a.ui_command);
+            wasmResult.actions = [
+              ...uiActions,
+              ...followUps.map((q) => ({ label: `💬 ${q}`, prompt: q })),
+            ].slice(0, 5);
+          }
+          wasmResult.markdown = rawText;
+          wasmResult.used_llm = true;
+          wasmResult.engine_label = `🧠 ${model} (Gemini API · WASM Planner + ${wasmResult.tool_trace.length} Tools)`;
+        }
+      }
+    } catch {
+      // Gracefully keep WASM deterministic synthesis
+    }
+  }
+
+  return { result: wasmResult, backend: 'go-local-wasm' };
 }
