@@ -91,13 +91,13 @@ export const FireCopilotDrawer: React.FC<FireCopilotDrawerProps> = ({
       id: 'welcome',
       role: 'assistant',
       timestamp: 'Ready',
-      engineLabel: '🧠 3-Stage Planner + Go Stochastic Tools',
+      engineLabel: '💬 Conversational FIRE Advisor + Go Quant Tools',
       text: [
-        `### 👋 FIRE Quant Copilot Ready (${meta.flag} ${curCity.name} → ${retCity.name})`,
+        `### 👋 Hi! I'm your FIRE Copilot (${meta.flag} ${curCity.name} → ${retCity.name})`,
         '',
-        `I am wired directly into FireSage's **Go Monte Carlo & Global Tax Engine** with **bi-directional Page-Driver control**:`,
-        `- **Live Telemetry:** **${surv}% Plan Survival** at Age ${input.retirement_age} • Projected Median Corpus **${p50}** vs. 90%-Safe Target **${req90}** (\`${analysis.implied_initial_swr.toFixed(2)}% SWR\`).`,
-        `- **Deliberative Tool Calls:** Ask me to **compare any of the 34 global cities**, **goal-seek your exact monthly SIP**, **stress-test a -35% crash + medical shock**, **audit pre-Age-${meta.unlockAge} liquidity**, or **update sliders & tabs directly** (e.g., *"Set retirement age to 48 and move to Goa"*).`,
+        `Ask me **anything in plain English** — whether it's a general FIRE concept (*"What's Coast vs. Barista FIRE?"*, *"Why not just use 35x?"*, *"Should I rent or buy?"*) or a deep dive into your own numbers:`,
+        `- **Your Live Snapshot:** **${surv}% survival** retiring at Age ${input.retirement_age} • Projected median corpus **${p50}** vs. 90%-safe target **${req90}** (\`${analysis.implied_initial_swr.toFixed(2)}% SWR\`).`,
+        `- **Simulate & Drive the App:** Ask me to **compare any of the 34 cities**, **solve your exact monthly SIP**, **stress-test market crashes + pre-Age-${meta.unlockAge} liquidity**, or **update sliders directly** (*"Set retirement age to 48 and move to Goa"*).`,
       ].join('\n'),
     };
   }, [
@@ -654,13 +654,16 @@ export const FireCopilotDrawer: React.FC<FireCopilotDrawerProps> = ({
             id={promptInputId}
             name="copilot_prompt"
             className="fs-copilot-textarea"
-            placeholder="Ask anything or drive the app (e.g. 'Compare Kolkata vs Goa vs Algarve', 'Set retire age to 48', 'How much SIP for 90%?')…"
+            placeholder="Ask any FIRE question in plain English, compare cities, or drive sliders (e.g. 'What is Coast FIRE?', 'Compare Goa vs Algarve')…"
             value={draftText}
             onChange={(e) => setDraftText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                void sendPrompt(draftText);
+                if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) {
+                  return;
+                }
+                e.currentTarget.form?.requestSubmit();
               }
             }}
           />

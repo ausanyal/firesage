@@ -117,4 +117,42 @@ func TestExecutePipelinePlannerToolsAndPersonas(t *testing.T) {
 	if !strings.Contains(eli5Resp.Markdown, "Plain-English Breakdown") || !strings.Contains(eli5Resp.Markdown, "35x") {
 		t.Fatalf("ELI5 35x explanation missing expected sections:\n%s", eli5Resp.Markdown)
 	}
+
+	// 5. Natural conversational & conceptual NLP questions (no robotic table dumps!)
+	metaResp := ExecutePipeline(ChatRequest{
+		Question:   "can i ask u FIRE related questions",
+		Mode:       "analyst",
+		Input:      base,
+		ValueBasis: "real",
+	})
+	if len(metaResp.ToolTrace) != 0 {
+		t.Fatalf("expected 0 heavy tool traces on casual capability question, got %d", len(metaResp.ToolTrace))
+	}
+	if !strings.Contains(metaResp.Markdown, "Yes, of course!") || strings.Contains(metaResp.Markdown, "| Core KPI |") {
+		t.Fatalf("expected warm conversational reply without unsolicited KPI table, got:\n%s", metaResp.Markdown)
+	}
+
+	conceptResp := ExecutePipeline(ChatRequest{
+		Question:   "What is the difference between Coast FIRE and Barista FIRE?",
+		Mode:       "analyst",
+		Input:      base,
+		ValueBasis: "real",
+	})
+	if !strings.Contains(conceptResp.Markdown, "Coast FIRE") || !strings.Contains(conceptResp.Markdown, "Barista") || strings.Contains(conceptResp.Markdown, "| Core KPI |") {
+		t.Fatalf("expected conversational Coast/Barista FIRE explanation without KPI table dump, got:\n%s", conceptResp.Markdown)
+	}
+
+	followResp := ExecutePipeline(ChatRequest{
+		Question:   "give me an example",
+		Mode:       "analyst",
+		Input:      base,
+		ValueBasis: "real",
+		History: []ChatTurn{
+			{Role: "user", Text: "What is sequence of returns risk?"},
+			{Role: "assistant", Text: "Sequence-of-returns risk is early market crash risk."},
+		},
+	})
+	if !strings.Contains(followResp.Markdown, "example") {
+		t.Fatalf("expected contextual follow-up example, got:\n%s", followResp.Markdown)
+	}
 }

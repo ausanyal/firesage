@@ -133,21 +133,26 @@ export async function runCopilotChat(
     try {
       const model = (req.model || 'gemini-2.5-flash').trim();
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const toolCount = (wasmResult.tool_trace ?? []).length;
+      const hasTools = toolCount > 0;
       const prompt = [
-        `You are FIRE Copilot — FireSage's Stage 3 Deliberative Quantitative Retirement Strategist (Mode: ${req.mode}).`,
-        `GROUNDING RULE: Cite ONLY exact figures from the [EXECUTED GO QUANTITATIVE TOOL EVIDENCE PACK] below. Format concisely in Markdown (headings, bullets, compact tables) and append 'FOLLOW_UPS: Q1? | Q2? | Q3?' on the final line.`,
+        `You are FIRE Copilot — FireSage's warm, conversational AI retirement, investing, tax, and geo-arbitrage strategist (Mode: ${req.mode}).`,
+        hasTools
+          ? `Open with a natural, conversational 1–2 sentence answer directly addressing the user's question, then share concise bullets or a compact table grounded strictly in the [EVIDENCE] below.`
+          : `Answer naturally, warmly, and conversationally in plain prose (80–220 words) without dumping unsolicited KPI tables. Only mention a number from [EVIDENCE] if it illustrates the concept naturally.`,
+        `Append 'FOLLOW_UPS: Q1? | Q2? | Q3?' on the final line.`,
         '',
-        `[EXECUTED GO QUANTITATIVE TOOL EVIDENCE PACK]`,
+        `[EVIDENCE]`,
         wasmResult.evidence_pack,
         '',
-        `[USER QUESTION]: ${req.question}`,
+        `[USER MESSAGE]: ${req.question}`,
       ].join('\n');
       const llmResp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.25, maxOutputTokens: 2048 },
+          generationConfig: { temperature: 0.35, maxOutputTokens: 2048 },
         }),
       });
       if (llmResp.ok) {
@@ -176,7 +181,9 @@ export async function runCopilotChat(
           }
           wasmResult.markdown = rawText;
           wasmResult.used_llm = true;
-          wasmResult.engine_label = `🧠 ${model} (Gemini API · WASM Planner + ${wasmResult.tool_trace.length} Tools)`;
+          wasmResult.engine_label = hasTools
+            ? `🧠 ${model} (Gemini API · WASM Planner + ${toolCount} Tools)`
+            : `🧠 ${model} (Gemini API · Conversational Advisor)`;
         }
       }
     } catch {

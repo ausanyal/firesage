@@ -131,6 +131,12 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 
 	intent := ParseUserQuestion(q, userBase)
 
+	// Route casual greetings, capability questions ("can i ask u FIRE related questions"),
+	// conversational follow-ups, and conceptual FIRE questions directly to the conversational advisor!
+	if kind, subtopic := ClassifyQueryKind(q, intent, req.History); kind == KindConversationalMeta || kind == KindConceptualFIRE || kind == KindFollowUp {
+		return ExecuteConversationalTurn(req, kind, subtopic)
+	}
+
 	var uiCommands []UICommand
 	var skills []string
 	var plannedTools []string
@@ -1065,10 +1071,34 @@ func synthesizeDeterministicMarkdown(
 
 	case PersonaDevil:
 		b.WriteString(fmt.Sprintf("### 🦈 Chief Risk Officer Pre-Mortem Audit: %s → %s\n\n", curCity.Name, retCity.Name))
-		b.WriteString(fmt.Sprintf("I stress-tested your **Age %d FIRE thesis** specifically hunting for failure modes across sequence-of-returns crashes, pre-Age-%d liquidity locks, and medical inflation:\n\n",
+		b.WriteString(fmt.Sprintf("Let's stress-test your **Age %d FIRE thesis** specifically hunting for what could go wrong across early market crashes, pre-Age-%d liquidity locks, and medical inflation:\n\n",
 			evalPlan.RetirementAge, unlockAge))
 	default:
-		b.WriteString(fmt.Sprintf("### 🎯 Actuarial & Tax Synthesis: %s → %s (%s)\n\n", curCity.Name, retCity.Name, statusTag))
+		if len(mutationNotes) > 0 {
+			b.WriteString(fmt.Sprintf("I simulated **%s** on your **%s → %s** plan — shifting your survival probability from **%.1f%% to %.1f%%** (`%+.1f%%`) and moving your 90%%-safe FIRE age from **Age %.1f to Age %.1f**:\n\n",
+				strings.Join(mutationNotes, " · "), curCity.Name, retCity.Name,
+				baseRes.SuccessRate, evalRes.SuccessRate, evalRes.SuccessRate-baseRes.SuccessRate,
+				baseRes.TargetFIREAge, evalRes.TargetFIREAge))
+		} else if len(cityRows) > 0 {
+			winner := cityRows[0]
+			b.WriteString(fmt.Sprintf("Comparing retirement hubs for your profile using identical market histories, **%s (%s)** comes out on top at **%.1f%% survival** (requiring **%s** for 90%% safety and enabling FIRE by **Age %.1f**):\n\n",
+				winner.City.Name, winner.City.Country, winner.SuccessRate,
+				FormatCompact(winner.RequiredCorpus90, cc), winner.TargetFIREAge))
+		} else if evalRes.SuccessRate >= 90 {
+			b.WriteString(fmt.Sprintf("You're in a **really strong position** (%s) — retiring at **Age %d** on your **%s → %s** plan survives **%.1f%%** of historical market storms through Age %d, with a projected median nest egg of **%s** against **%s** needed for 90%% confidence:\n\n",
+				statusTag, evalPlan.RetirementAge, curCity.Name, retCity.Name,
+				evalRes.SuccessRate, evalPlan.HorizonAge,
+				FormatCompact(evalRes.CorpusAtFireRealP50, cc), FormatCompact(evalRes.RequiredCorpus90, cc)))
+		} else if evalRes.SuccessRate >= 75 {
+			b.WriteString(fmt.Sprintf("You're **fairly close, though just shy of the 90%% safety bar** right now — retiring at **Age %d** on your **%s → %s** plan survives **%.1f%%** of market histories (projected median corpus **%s** vs. **%s** needed for 90%% confidence). A modest tweak to savings, retirement age, or city closes the gap:\n\n",
+				evalPlan.RetirementAge, curCity.Name, retCity.Name,
+				evalRes.SuccessRate,
+				FormatCompact(evalRes.CorpusAtFireRealP50, cc), FormatCompact(evalRes.RequiredCorpus90, cc)))
+		} else {
+			b.WriteString(fmt.Sprintf("Right now, retiring at **Age %d** in **%s** is stretched — your plan survives **%.1f%%** of market regimes through Age %d (projected median corpus **%s** vs. **%s** needed for 90%% confidence), leaving it vulnerable to early sequence-of-returns storms. Here is where the numbers stand and the fastest ways to strengthen them:\n\n",
+				evalPlan.RetirementAge, retCity.Name, evalRes.SuccessRate, evalPlan.HorizonAge,
+				FormatCompact(evalRes.CorpusAtFireRealP50, cc), FormatCompact(evalRes.RequiredCorpus90, cc)))
+		}
 	}
 
 	// Core Telemetry / Before-vs-After Table
