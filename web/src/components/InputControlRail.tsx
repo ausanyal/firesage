@@ -7,6 +7,7 @@ import type {
   WithdrawalStrategy,
 } from '../types';
 import { currencySymbol, formatMoneyCompact } from '../utils/format';
+import { BufferedNumberInput } from './BufferedNumberInput';
 
 interface InputControlRailProps {
   input: PlanInput;
@@ -66,32 +67,32 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
           <div className="fs-field-row-2">
             <div className="fs-field">
               <label htmlFor="fs-curr-age">Current Age</label>
-              <input
+              <BufferedNumberInput
                 id="fs-curr-age"
                 name="current_age"
-                type="number"
                 min={18}
                 max={80}
                 value={input.current_age}
-                onChange={(e) => {
-                  const v = Number(e.target.value) || 25;
+                onCommit={(v) => {
+                  const nextRetire = Math.max(v + 1, input.retirement_age);
+                  const nextHorizon = Math.max(nextRetire + 5, input.horizon_age);
                   update({
                     current_age: v,
-                    retirement_age: Math.max(v + 1, input.retirement_age),
+                    retirement_age: nextRetire,
+                    horizon_age: nextHorizon,
                   });
                 }}
               />
             </div>
             <div className="fs-field">
               <label htmlFor="fs-horizon-age">Plan Until Age</label>
-              <input
+              <BufferedNumberInput
                 id="fs-horizon-age"
                 name="horizon_age"
-                type="number"
                 min={input.retirement_age + 5}
                 max={105}
                 value={input.horizon_age}
-                onChange={(e) => update({ horizon_age: Number(e.target.value) || 90 })}
+                onCommit={(v) => update({ horizon_age: v })}
               />
             </div>
           </div>
@@ -201,20 +202,18 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
               <label htmlFor="fs-corpus">Current Investable Corpus ({sym})</label>
               <strong className="fs-val-callout">{formatMoneyCompact(input.current_corpus, input.country)}</strong>
             </div>
-            <input
+            <BufferedNumberInput
               id="fs-corpus"
               name="current_corpus"
-              type="number"
               step={corpusStep}
               min={0}
               value={Math.round(input.current_corpus)}
-              onChange={(e) => {
-                const val = Math.max(0, Number(e.target.value) || 0);
+              onCommit={(val) =>
                 update({
                   current_corpus: val,
                   buckets: { ...input.buckets, use_granular: false },
-                });
-              }}
+                })
+              }
             />
           </div>
 
@@ -223,31 +222,27 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
               <div className="fs-label-split">
                 <label htmlFor="fs-savings">Monthly SIP / Save</label>
               </div>
-              <input
+              <BufferedNumberInput
                 id="fs-savings"
                 name="monthly_savings"
-                type="number"
                 step={savingsStep}
                 min={0}
                 value={Math.round(input.monthly_savings)}
-                onChange={(e) => update({ monthly_savings: Math.max(0, Number(e.target.value) || 0) })}
+                onCommit={(v) => update({ monthly_savings: v })}
               />
               <span className="fs-hint">{formatMoneyCompact(input.monthly_savings, input.country)}/mo</span>
             </div>
 
             <div className="fs-field">
               <label htmlFor="fs-stepup">Annual Step-Up %</label>
-              <input
+              <BufferedNumberInput
                 id="fs-stepup"
                 name="annual_savings_step_up"
-                type="number"
                 step={1}
                 min={0}
                 max={25}
                 value={Math.round(input.annual_savings_step_up * 100)}
-                onChange={(e) =>
-                  update({ annual_savings_step_up: Math.max(0, Math.min(25, Number(e.target.value) || 0)) / 100 })
-                }
+                onCommit={(v) => update({ annual_savings_step_up: v / 100 })}
               />
               <span className="fs-hint">Career SIP growth/yr</span>
             </div>
@@ -260,14 +255,13 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                 {formatMoneyCompact(input.desired_monthly_spend, input.country)}/mo
               </strong>
             </div>
-            <input
+            <BufferedNumberInput
               id="fs-spend"
               name="desired_monthly_spend"
-              type="number"
               step={spendStep}
-              min={input.country === 'IN' ? 15000 : 1000}
+              min={input.country === 'IN' ? 5000 : 500}
               value={Math.round(input.desired_monthly_spend)}
-              onChange={(e) => update({ desired_monthly_spend: Math.max(1000, Number(e.target.value) || 0) })}
+              onCommit={(v) => update({ desired_monthly_spend: v })}
             />
             {currentCity && (
               <div className="fs-preset-bar" aria-label="City lifestyle presets">
@@ -381,15 +375,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     <label htmlFor="fs-b-eq">
                       {input.country === 'IN' ? 'Taxable Equity/Arb MF' : 'Taxable Brokerage'}
                     </label>
-                    <input
+                    <BufferedNumberInput
                       id="fs-b-eq"
                       name="bucket_taxable_eq"
-                      type="number"
+                      min={0}
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.taxable_equity)}
-                      onChange={(e) =>
+                      onCommit={(v) =>
                         update({
-                          buckets: { ...input.buckets, taxable_equity: Math.max(0, Number(e.target.value) || 0) },
+                          buckets: { ...input.buckets, taxable_equity: v },
                         })
                       }
                     />
@@ -398,15 +392,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     <label htmlFor="fs-b-debt">
                       {input.country === 'IN' ? 'Liquid / Debt MF / FD' : 'Cash / T-Bills'}
                     </label>
-                    <input
+                    <BufferedNumberInput
                       id="fs-b-debt"
                       name="bucket_debt"
-                      type="number"
+                      min={0}
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.taxable_debt_cash)}
-                      onChange={(e) =>
+                      onCommit={(v) =>
                         update({
-                          buckets: { ...input.buckets, taxable_debt_cash: Math.max(0, Number(e.target.value) || 0) },
+                          buckets: { ...input.buckets, taxable_debt_cash: v },
                         })
                       }
                     />
@@ -415,15 +409,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     <label htmlFor="fs-b-def">
                       {input.country === 'IN' ? 'EPF / VPF Balance' : 'Traditional 401(k) / IRA'}
                     </label>
-                    <input
+                    <BufferedNumberInput
                       id="fs-b-def"
                       name="bucket_def"
-                      type="number"
+                      min={0}
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.tax_deferred_locked)}
-                      onChange={(e) =>
+                      onCommit={(v) =>
                         update({
-                          buckets: { ...input.buckets, tax_deferred_locked: Math.max(0, Number(e.target.value) || 0) },
+                          buckets: { ...input.buckets, tax_deferred_locked: v },
                         })
                       }
                     />
@@ -432,15 +426,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     <label htmlFor="fs-b-free">
                       {input.country === 'IN' ? 'PPF (EEE Tax-Free)' : 'Roth IRA + HSA'}
                     </label>
-                    <input
+                    <BufferedNumberInput
                       id="fs-b-free"
                       name="bucket_free"
-                      type="number"
+                      min={0}
                       step={corpusStep / 2}
                       value={Math.round(input.buckets.tax_free_account)}
-                      onChange={(e) =>
+                      onCommit={(v) =>
                         update({
-                          buckets: { ...input.buckets, tax_free_account: Math.max(0, Number(e.target.value) || 0) },
+                          buckets: { ...input.buckets, tax_free_account: v },
                         })
                       }
                     />
@@ -448,15 +442,15 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                   {input.country === 'IN' && (
                     <div className="fs-field">
                       <label htmlFor="fs-b-nps">NPS Tier-I (Locked to 60)</label>
-                      <input
+                      <BufferedNumberInput
                         id="fs-b-nps"
                         name="bucket_nps"
-                        type="number"
+                        min={0}
                         step={corpusStep / 2}
                         value={Math.round(input.buckets.pension_locked)}
-                        onChange={(e) =>
+                        onCommit={(v) =>
                           update({
-                            buckets: { ...input.buckets, pension_locked: Math.max(0, Number(e.target.value) || 0) },
+                            buckets: { ...input.buckets, pension_locked: v },
                           })
                         }
                       />
@@ -470,30 +464,24 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                   <label htmlFor="fs-ss-amt">
                     {input.country === 'US' ? 'Monthly Social Security' : 'Monthly Pension/Rental'}
                   </label>
-                  <input
+                  <BufferedNumberInput
                     id="fs-ss-amt"
                     name="social_security_monthly_real"
-                    type="number"
                     step={200}
                     min={0}
                     value={Math.round(input.social_security_monthly_real)}
-                    onChange={(e) =>
-                      update({ social_security_monthly_real: Math.max(0, Number(e.target.value) || 0) })
-                    }
+                    onCommit={(v) => update({ social_security_monthly_real: v })}
                   />
                 </div>
                 <div className="fs-field">
                   <label htmlFor="fs-ss-age">Start Age</label>
-                  <input
+                  <BufferedNumberInput
                     id="fs-ss-age"
                     name="social_security_start_age"
-                    type="number"
                     min={50}
                     max={75}
                     value={input.social_security_start_age}
-                    onChange={(e) =>
-                      update({ social_security_start_age: Math.max(50, Math.min(75, Number(e.target.value) || 67)) })
-                    }
+                    onCommit={(v) => update({ social_security_start_age: v })}
                   />
                 </div>
               </div>
@@ -527,22 +515,20 @@ export const InputControlRail: React.FC<InputControlRailProps> = ({ input, citie
                     onChange={(e) => setNewEventName(e.target.value)}
                   />
                   <div className="fs-field-row-2">
-                    <input
-                      type="number"
+                    <BufferedNumberInput
                       name="new_event_age"
-                      aria-label="Milestone age"
+                      ariaLabel="Milestone age"
                       min={input.current_age}
                       max={input.horizon_age}
                       value={newEventAge}
-                      onChange={(e) => setNewEventAge(Number(e.target.value) || input.retirement_age)}
+                      onCommit={(v) => setNewEventAge(v)}
                     />
-                    <input
-                      type="number"
+                    <BufferedNumberInput
                       name="new_event_amount"
-                      aria-label="Signed real amount"
+                      ariaLabel="Signed real amount"
                       step={corpusStep / 2}
                       value={newEventAmt}
-                      onChange={(e) => setNewEventAmt(Number(e.target.value) || 0)}
+                      onCommit={(v) => setNewEventAmt(v)}
                     />
                   </div>
                   <button type="button" className="fs-btn fs-btn-ghost fs-full-btn" onClick={addLifeEvent}>
