@@ -9,8 +9,8 @@ import (
 )
 
 func TestExtractMentionedCitiesGlobal34(t *testing.T) {
-	cities := ExtractMentionedCities("Compare retiring in Bangalore vs Calcutta vs Cochin vs Algarve vs South of Italy vs Lugano")
-	wantIDs := []string{"in-bengaluru", "in-kolkata", "in-kochi", "eu-algarve", "eu-south-italy", "eu-lugano"}
+	cities := ExtractMentionedCities("Compare retiring in Bangalore vs Chennai vs Haryana vs Dehradun vs Indore vs Calcutta vs Cochin vs Algarve vs South of Italy vs Lugano")
+	wantIDs := []string{"in-bengaluru", "in-chennai", "in-haryana", "in-dehradun", "in-indore", "in-kolkata", "in-kochi", "eu-algarve", "eu-south-italy", "eu-lugano"}
 	if len(cities) != len(wantIDs) {
 		t.Fatalf("got %d cities (%+v), want %d", len(cities), cities, len(wantIDs))
 	}

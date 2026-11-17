@@ -34,7 +34,7 @@ func TestHTTPServerEndpointsEndToEnd(t *testing.T) {
 		t.Fatalf("missing X-Content-Type-Options: nosniff header")
 	}
 
-	// 2. Metadata endpoint: 5 countries, 34 global cities, FX rates, templates
+	// 2. Metadata endpoint: 5 countries, 37 global cities, FX rates, templates
 	reqMeta := httptest.NewRequest(http.MethodGet, "/api/v1/metadata", nil)
 	recMeta := httptest.NewRecorder()
 	mux.ServeHTTP(recMeta, reqMeta)
@@ -49,8 +49,8 @@ func TestHTTPServerEndpointsEndToEnd(t *testing.T) {
 		t.Fatalf("expected 5 jurisdictions in metadata defaults/valuations/fx, got %d/%d/%d",
 			len(meta.Defaults), len(meta.Valuations), len(meta.FXRatesPerUSD))
 	}
-	if len(meta.Cities) != 34 {
-		t.Fatalf("expected 34 cities in /api/v1/metadata, got %d", len(meta.Cities))
+	if len(meta.Cities) != 37 {
+		t.Fatalf("expected 37 cities in /api/v1/metadata, got %d", len(meta.Cities))
 	}
 
 	// 3. POST /api/v1/analyze: Bengaluru -> Kolkata & cross-border Bengaluru -> Zurich Suburbs

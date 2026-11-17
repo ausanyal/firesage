@@ -77,6 +77,16 @@ func FormatCompact(amount float64, country data.CountryCode) string {
 	}
 }
 
+// ActiveRetireMonthly returns the actual monthly retirement spend for plan, accounting for whether
+// plan is relocating with COL scaling vs. staying in CurrentCity (where GeoArbitrage.EffectiveRetireMonthly
+// holds the default Tier-2 comparison benchmark rather than StayRetireMonthly).
+func ActiveRetireMonthly(plan engine.PlanInput, res engine.FullAnalysisResponse) float64 {
+	if res.GeoArbitrage.IsRelocating && plan.AutoScaleLifestyleOnMove {
+		return res.GeoArbitrage.EffectiveRetireMonthly
+	}
+	return res.GeoArbitrage.StayRetireMonthly
+}
+
 // CountryUnlockAge returns the statutory penalty-free pension unlock age for a jurisdiction.
 func CountryUnlockAge(c data.CountryCode) int {
 	if c == data.CountryNewZealand {
@@ -109,16 +119,27 @@ type cityAliasEntry struct {
 }
 
 var cityAliases = []cityAliasEntry{
-	// India (11 cities)
+	// India (14 cities)
 	{"bengaluru", "in-bengaluru"},
 	{"bangalore", "in-bengaluru"},
 	{"mumbai", "in-mumbai"},
 	{"bombay", "in-mumbai"},
 	{"delhi-ncr", "in-delhi-ncr"},
+	{"new delhi", "in-delhi-ncr"},
 	{"delhi", "in-delhi-ncr"},
-	{"gurugram", "in-delhi-ncr"},
-	{"gurgaon", "in-delhi-ncr"},
 	{"noida", "in-delhi-ncr"},
+	{"ghaziabad", "in-delhi-ncr"},
+	{"haryana", "in-haryana"},
+	{"gurugram", "in-haryana"},
+	{"gurgaon", "in-haryana"},
+	{"panchkula", "in-haryana"},
+	{"faridabad", "in-haryana"},
+	{"karnal", "in-haryana"},
+	{"sonipat", "in-haryana"},
+	{"hisar", "in-haryana"},
+	{"ambala", "in-haryana"},
+	{"chennai", "in-chennai"},
+	{"madras", "in-chennai"},
 	{"hyderabad", "in-hyderabad"},
 	{"kolkata", "in-kolkata"},
 	{"calcutta", "in-kolkata"},
@@ -131,6 +152,13 @@ var cityAliases = []cityAliasEntry{
 	{"kochi", "in-kochi"},
 	{"cochin", "in-kochi"},
 	{"dehradun", "in-dehradun"},
+	{"doon", "in-dehradun"},
+	{"rishikesh", "in-dehradun"},
+	{"mussoorie", "in-dehradun"},
+	{"uttarakhand", "in-dehradun"},
+	{"indore", "in-indore"},
+	{"ujjain", "in-indore"},
+	{"madhya pradesh", "in-indore"},
 	{"kodaikanal", "in-kodaikanal"},
 	{"kodai", "in-kodaikanal"},
 
@@ -234,7 +262,7 @@ func ExtractMentionedCities(question string) []data.CityProfile {
 		return hits[i].length > hits[j].length
 	})
 
-	cityByID := make(map[string]data.CityProfile, 40)
+	cityByID := make(map[string]data.CityProfile, 48)
 	for _, c := range data.Cities() {
 		cityByID[c.ID] = c
 	}

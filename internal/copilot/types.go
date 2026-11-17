@@ -24,7 +24,7 @@ var SkillsRegistry = map[string]PlannerSkill{
 	"skill_page_driver": {
 		ID:          "skill_page_driver",
 		Name:        "UI Page-Driver & Bi-Directional Plan Controller",
-		Description: "Drives FireSage UI state: updates live PlanInput parameters, switches 5 jurisdictions & 34 global cities, toggles Real vs. Nominal basis, opens Trajectory Autopsy, switches Battle-Test Lab tabs, and scrolls to target charts.",
+		Description: "Drives FireSage UI state: updates live PlanInput parameters, switches 5 jurisdictions & 37 global cities, toggles Real vs. Nominal basis, opens Trajectory Autopsy, switches Battle-Test Lab tabs, and scrolls to target charts.",
 	},
 	"skill_monte_carlo_srr": {
 		ID:          "skill_monte_carlo_srr",
@@ -38,7 +38,7 @@ var SkillsRegistry = map[string]PlannerSkill{
 	},
 	"skill_geo_arbitrage_scanner": {
 		ID:          "skill_geo_arbitrage_scanner",
-		Name:        "34-City Intra-Country & Cross-Border Geo-Arbitrage Comparator",
+		Name:        "37-City Intra-Country & Cross-Border Geo-Arbitrage Comparator",
 		Description: "Runs parallel stochastic simulations across domestic and cross-border retirement cities, isolating 0.65*COL + 0.35*Housing scaling, FX parity, and destination residency tax/medical regimes.",
 	},
 	"skill_goal_seek_solver": {

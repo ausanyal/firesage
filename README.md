@@ -4,7 +4,7 @@
 
 - **Live App:** https://firesage-121012042522.asia-south1.run.app/
 - **Supported Jurisdictions:** **India (`₹` INR)** • **United States (`$` USD)** • **Australia (`A$` AUD)** • **Europe & Switzerland (`€` EUR)** • **New Zealand (`NZ$` NZD)**
-- **Calibrated Global Cities:** **34 cities & retirement hubs** with **any-to-any cross-border relocation** (accumulate in one country's tax/pension system, retire in any of the 34 cities worldwide).
+- **Calibrated Global Cities:** **37 cities & retirement hubs** with **any-to-any cross-border relocation** (accumulate in one country's tax/pension system, retire in any of the 37 cities worldwide).
 - **Architecture:** Zero-dependency **Go 1.24** quantitative simulation & tax engine + **React 19 / TypeScript / Vite** UI compiled into both a **single distroless Cloud Run container (`PORT=8080`)** and an **in-browser WebAssembly Worker** for private, local-first execution.
 
 ---
@@ -23,8 +23,8 @@
    - [11-Step Common Random Numbers (CRN) Goal-Seek Solver](#22-11-step-common-random-numbers-crn-goal-seek-solver)
    - [What Pushes Your Personal Multiplier Above or Below `35x`?](#23-what-pushes-your-personal-multiplier-above-or-below-35x)
 3. [Unified Mathematical Formulation & Cross-Border FX Engine](#3-unified-mathematical-formulation--cross-border-fx-engine)
-4. [Country-by-Country Research, Tax, Pension & Healthcare Models (34 Cities)](#4-country-by-country-research-tax-pension--healthcare-models-34-cities)
-   - [🇮🇳 India (`₹` INR — 11 Cities incl. Kolkata, Dehradun, Kodaikanal, Kochi/Cochin)](#41--india--inr--11-cities)
+4. [Country-by-Country Research, Tax, Pension & Healthcare Models (37 Cities)](#4-country-by-country-research-tax-pension--healthcare-models-37-cities)
+   - [🇮🇳 India (`₹` INR — 14 Cities incl. Chennai, Haryana, Dehradun, Indore, Kolkata, Kodaikanal, Kochi/Cochin)](#41--india--inr--14-cities)
    - [🇺🇸 United States (`$` USD — 7 Cities across 7 State Tax Regimes)](#42--united-states--usd--7-cities)
    - [🇦🇺 Australia (`A$` AUD — 4 Cities)](#43--australia-a-aud--4-cities)
    - [🇪🇺 Europe & Switzerland (`€` EUR — 8 Hubs across 6 Tax Sub-Jurisdictions)](#44--europe--switzerland--eur--8-hubs)
@@ -43,7 +43,7 @@
   Selects your **Working / Accumulation Jurisdiction** — determining your portfolio currency, historical asset/inflation dataset, and statutory retirement account rules during your working years.
 - **Section 1 — Timeline & Global Geo-Arbitrage:**
   - **Current Age, Retire Age & Plan Until Age:** Set your current age, candidate retirement age, and longevity horizon (e.g., `90–95`). Numeric inputs buffer while typing so you can erase any box completely blank and type from scratch without premature clamping.
-  - **Work City vs. Retire City (Global):** Your Work City comes from your active working country, while **Retire City (Global)** lets you pick **any of the 34 cities across all 5 jurisdictions** (e.g., *Work in Bengaluru → Retire in Kolkata or Goa*, *Work in San Jose → Retire in Portugal or Goa*, *Work in Sydney → Retire in Southern Italy*, or *Work in India → Retire in Raleigh, NC*).
+  - **Work City vs. Retire City (Global):** Your Work City comes from your active working country, while **Retire City (Global)** lets you pick **any of the 37 cities across all 5 jurisdictions** (e.g., *Work in Bengaluru → Retire in Chennai, Indore, Dehradun, Kolkata, or Goa*, *Work in San Jose → Retire in Portugal or Goa*, *Work in Sydney → Retire in Southern Italy*, or *Work in India → Retire in Raleigh, NC*).
   - **Cross-Border Relocation Banner & `Auto-scale lifestyle by city COL`:** Whenever your Retirement City is in a different city or country, FireSage shows the live FX parity rate, preserves your working country's statutory pension lock-in rules, switches your retirement taxes & healthcare to the destination city on the day you retire, and optionally scales your lifestyle budget to match the destination's Cost-of-Living & Housing index.
 - **Section 2 — Corpus, Statutory Retirement Funds & Lifestyle:**
   - **Liquid Spendable Corpus vs. Locked Retirement Funds:** Separated directly in Section 2 so early retirees can distinguish **accessible pre-unlock money** (Mutual Funds / Brokerage / Cash / PIE funds) from **statutorily locked retirement accounts** (`EPF / PPF / NPS` in India, `401(k) / IRA / Roth` in the US, `Superannuation` in Australia, `Pillar 2 / 3a` in Europe/CH, and `KiwiSaver` in New Zealand).
@@ -181,9 +181,9 @@ $$
 
 ---
 
-## 4. Country-by-Country Research, Tax, Pension & Healthcare Models (34 Cities)
+## 4. Country-by-Country Research, Tax, Pension & Healthcare Models (37 Cities)
 
-### 4.1 🇮🇳 India (`₹` INR — 11 Cities)
+### 4.1 🇮🇳 India (`₹` INR — 14 Cities)
 
 - **Historical Dataset (`1980–2025`):** S&P BSE Sensex Total Return spliced with NSE Nifty 50 TRI, RBI 10-Year GoI G-Sec & 91-Day T-Bill yields, INR Gold, MoSPI CPI-Combined, and `11%–14%` Indian private medical inflation.
 - **Tax & Lock-In Mechanics (`internal/tax/india.go`):**
@@ -197,6 +197,8 @@ $$
 | **Bengaluru** (`in-bengaluru`) | Karnataka | Tier 1 | `1.00` / `1.00` | `₹75K` / **`₹1.40L`** / `₹2.60L` / `₹5.00L` | `₹2.25 Cr` | `₹0` |
 | **Mumbai** (`in-mumbai`) | Maharashtra | Tier 1 | `1.24` / `1.60` | `₹1.05L` / **`₹1.85L`** / `₹3.40L` / `₹6.50L` | `₹3.80 Cr` | `₹0` |
 | **Delhi-NCR** (`in-delhi-ncr`) | NCR | Tier 1 | `1.06` / `1.15` | `₹82K` / **`₹1.50L`** / `₹2.80L` / `₹5.40L` | `₹2.60 Cr` | `₹0` |
+| **Haryana (Gurugram / Panchkula)** (`in-haryana`) | Haryana | Tier 1 | `0.96` / `0.95` | `₹72K` / **`₹1.35L`** / `₹2.50L` / `₹4.80L` | `₹2.20 Cr` | `₹0` *(Medanta / Artemis)* |
+| **Chennai** (`in-chennai`) | Tamil Nadu | Tier 1 | `0.92` / `0.88` | `₹68K` / **`₹1.25L`** / `₹2.30L` / `₹4.40L` | `₹1.85 Cr` | `₹0` *(Apollo / MIOT / CMC)* |
 | **Hyderabad** (`in-hyderabad`) | Telangana | Tier 1 | `0.94` / `0.92` | `₹70K` / **`₹1.30L`** / `₹2.40L` / `₹4.60L` | `₹1.95 Cr` | `₹0` |
 | **Kolkata** (`in-kolkata`) | West Bengal | Tier 1 | `0.76` / `0.62` | `₹55K` / **`₹1.05L`** / `₹1.95L` / `₹3.70L` | `₹1.35 Cr` | `₹0` *(Apollo / Medica / Fortis)* |
 | **Goa** (`in-goa`) | Goa | Tier 2 | `0.78` / `0.65` | `₹58K` / **`₹1.08L`** / `₹2.00L` / `₹3.90L` | `₹1.45 Cr` | `₹60K/yr` |
@@ -204,6 +206,7 @@ $$
 | **Coimbatore** (`in-coimbatore`) | Tamil Nadu | Tier 2 | `0.70` / `0.50` | `₹50K` / **`₹95K`** / `₹1.75L` / `₹3.30L` | `₹1.10 Cr` | `₹20K/yr` |
 | **Kochi (Cochin)** (`in-kochi`) | Kerala | Tier 2 | `0.74` / `0.55` | `₹54K` / **`₹1.02L`** / `₹1.88L` / `₹3.55L` | `₹1.20 Cr` | `₹15K/yr` *(Aster / Amrita)* |
 | **Dehradun** (`in-dehradun`) | Uttarakhand | Tier 2 | `0.72` / `0.56` | `₹52K` / **`₹98K`** / `₹1.80L` / `₹3.40L` | `₹1.45 Cr` | `₹18K/yr` *(Max / AIIMS Rishikesh)* |
+| **Indore** (`in-indore`) | Madhya Pradesh | Tier 2 | `0.66` / `0.46` | `₹46K` / **`₹88K`** / `₹1.62L` / `₹3.05L` | `₹98 L` | `₹22K/yr` *(Medanta / Kokilaben)* |
 | **Kodaikanal** (`in-kodaikanal`) | Tamil Nadu | Tier 2 | `0.71` / `0.58` | `₹50K` / **`₹96K`** / `₹1.76L` / `₹3.35L` | `₹1.65 Cr` | `₹55K/yr` *(Madurai ~3 hrs)* |
 
 ---
@@ -302,7 +305,7 @@ $$
 FireSage includes a built-in **Deliberative Agentic Copilot (`💬 FIRE Chat` / `💬 Ask FIRE Copilot`)** modeled on StockSage's institutional 3-stage quantitative agent architecture (`internal/copilot/` + `internal/server/chat.go` + WASM `firesageRunChat`):
 
 1. **Stage 1 — Strategic Planner, Falsifiable Hypotheses & Bi-Directional Page Driver:**
-   - Parses multi-currency values (`₹ Cr / L`, `$`, `A$`, `€`, `NZ$`), city aliases across all **34 global hubs**, explicit UI mutations vs. `"What-If"` explorations, and 7 attached specialist skills (`skill_page_driver`, `skill_monte_carlo_srr`, `skill_geo_arbitrage_scanner`, `skill_goal_seek_solver`, `skill_crisis_stress_tester`, `skill_life_events_architect`, `skill_liquidity_tax_bridge`).
+   - Parses multi-currency values (`₹ Cr / L`, `$`, `A$`, `€`, `NZ$`), city aliases across all **37 global hubs**, explicit UI mutations vs. `"What-If"` explorations, and 7 attached specialist skills (`skill_page_driver`, `skill_monte_carlo_srr`, `skill_geo_arbitrage_scanner`, `skill_goal_seek_solver`, `skill_crisis_stress_tester`, `skill_life_events_architect`, `skill_liquidity_tax_bridge`).
    - Formulates **3 falsifiable actuarial hypotheses (`H1`–`H3`)** and dispatches live **UI Page-Driver commands (`ui_commands`)** that automatically update `PlanInput` sliders/cities (`APPLY_PLAN_PATCH`), switch valuation basis (`SET_VALUE_BASIS`), open the Year-by-Year Trajectory Autopsy (`OPEN_AUTOPSY`), switch Battle-Test Lab tabs (`OPEN_LAB_TAB`), or scroll to dashboard sections (`SCROLL_TO_SECTION`).
 2. **Stage 2 — Parallel Go Stochastic Engine Tool Executor:**
    - Executes real Go quantitative simulations in parallel (`audit_plan_telemetry`, `update_live_plan_parameters`, parallel goroutine `compare_cities_geo_arbitrage`, CRN bisection `solve_goal_seek_targets`, `run_stress_and_crisis_shock`, `simulate_life_event`, and `audit_tax_and_liquidity_bridge`) — recording exact execution latency (`ms`) and telemetry in an expandable **`🧠 Deliberative Planner, Hypotheses & Tool Trace`** disclosure card.

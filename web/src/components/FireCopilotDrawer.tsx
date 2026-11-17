@@ -33,7 +33,7 @@ const SKILL_BADGE_NAMES: Record<string, string> = {
   skill_page_driver: '🧭 UI Page-Driver',
   skill_monte_carlo_srr: '🎲 Block-Bootstrap & SRR',
   skill_liquidity_tax_bridge: '🏛️ Tax & Age-Unlock Bridge',
-  skill_geo_arbitrage_scanner: '🌍 34-City Geo-Arbitrage',
+  skill_geo_arbitrage_scanner: '🌍 Global City Geo-Arbitrage',
   skill_goal_seek_solver: '🧮 CRN Goal-Seek Solver',
   skill_crisis_stress_tester: '⚡ Crisis & Stagflation Lab',
   skill_life_events_architect: '📅 Life-Events Modeler',
@@ -97,10 +97,11 @@ export const FireCopilotDrawer: React.FC<FireCopilotDrawerProps> = ({
         '',
         `Ask me **anything in plain English** — whether it's a general FIRE concept (*"What's Coast vs. Barista FIRE?"*, *"Why not just use 35x?"*, *"Should I rent or buy?"*) or a deep dive into your own numbers:`,
         `- **Your Live Snapshot:** **${surv}% survival** retiring at Age ${input.retirement_age} • Projected median corpus **${p50}** vs. 90%-safe target **${req90}** (\`${analysis.implied_initial_swr.toFixed(2)}% SWR\`).`,
-        `- **Simulate & Drive the App:** Ask me to **compare any of the 34 cities**, **solve your exact monthly SIP**, **stress-test market crashes + pre-Age-${meta.unlockAge} liquidity**, or **update sliders directly** (*"Set retirement age to 48 and move to Goa"*).`,
+        `- **Simulate & Drive the App:** Ask me to **compare any of the ${cities.length} cities**, **solve your exact monthly SIP**, **stress-test market crashes + pre-Age-${meta.unlockAge} liquidity**, or **update sliders directly** (*"Set retirement age to 48 and move to Goa"*).`,
       ].join('\n'),
     };
   }, [
+    cities.length,
     input.country,
     input.retirement_age,
     analysis.success_rate,

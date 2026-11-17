@@ -553,7 +553,7 @@ export const App: React.FC = () => {
                 </h2>
                 <p className="ms-fire-subline">
                   Politis &amp; Romano stationary block bootstrap preserving multi-year stagflation waves, statutory Age-
-                  {unlockAge} pension lock-ins, and 34-city global geo-arbitrage parity.
+                  {unlockAge} pension lock-ins, and {metadata.cities.length}-city global geo-arbitrage parity.
                 </p>
               </div>
 
@@ -648,7 +648,7 @@ export const App: React.FC = () => {
             <div className="fs-copilot-launchinfo">
               <span className="fs-badge fs-badge-emerald">🧠 Agentic Planner + Tools</span>
               <span>
-                Ask <strong>FIRE Quant Copilot</strong> to compare 34 global cities, solve your 90% SIP, or drive
+                Ask <strong>FIRE Quant Copilot</strong> to compare {metadata.cities.length} global cities, solve your 90% SIP, or drive
                 sliders &amp; stress tests live.
               </span>
             </div>
@@ -928,8 +928,8 @@ export const App: React.FC = () => {
               &amp; Gold + Shiller CAPE (P/E10) &amp; BLS Headline/Medical CPI.
               <br />
               <strong>India (1980–2025):</strong> BSE Sensex / NSE Nifty 50 TRI, RBI 10Y GoI G-Sec &amp; 91d T-Bill, INR
-              Gold, MoSPI CPI-Combined + 11%–14% Indian Medical CPI (incl. Kolkata, Dehradun, Kodaikanal &amp;
-              Kochi/Cochin Zone &amp; hill-station tertiary travel buffers).
+              Gold, MoSPI CPI-Combined + 11%–14% Indian Medical CPI (incl. Chennai, Haryana, Dehradun, Indore, Kolkata,
+              Kodaikanal &amp; Kochi/Cochin Zone &amp; hill-station tertiary travel buffers).
               <br />
               <strong>Australia (1980–2025):</strong> S&amp;P/ASX 200 Accumulation Index (incl. franked dividend yield),
               RBA 10Y Commonwealth Govt Bonds &amp; Cash Rate, AUD Gold, ABS CPI &amp; AIHW Health CPI.

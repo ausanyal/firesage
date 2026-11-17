@@ -10,12 +10,12 @@ import (
 
 func TestAll34CitiesAnd5CountriesIntegrity(t *testing.T) {
 	allCities := data.Cities()
-	if len(allCities) != 34 {
-		t.Fatalf("expected exactly 34 global cities, got %d", len(allCities))
+	if len(allCities) != 37 {
+		t.Fatalf("expected exactly 37 global cities, got %d", len(allCities))
 	}
 
 	expectedCounts := map[data.CountryCode]int{
-		data.CountryIndia:      11,
+		data.CountryIndia:      14,
 		data.CountryUSA:        7,
 		data.CountryAustralia:  4,
 		data.CountryEurope:     8,
@@ -48,7 +48,8 @@ func TestAll34CitiesAnd5CountriesIntegrity(t *testing.T) {
 
 	// Verify required newly added cities are all registered
 	mustExist := []string{
-		"in-kolkata", "in-dehradun", "in-kodaikanal", "in-kochi",
+		"in-chennai", "in-haryana", "in-dehradun", "in-indore",
+		"in-kolkata", "in-kodaikanal", "in-kochi",
 		"au-sydney", "au-melbourne", "au-adelaide", "au-gold-coast",
 		"eu-zurich-suburbs", "eu-lugano", "eu-south-italy", "eu-cascais-lisbon", "eu-algarve",
 		"nz-auckland", "nz-wellington", "nz-tauranga-nelson",

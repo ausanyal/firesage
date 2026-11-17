@@ -52,7 +52,7 @@ func NormalizePlanInput(in PlanInput) PlanInput {
 	if in.RetirementCityID == "" {
 		in.RetirementCityID = currCity.ID
 	} else {
-		// Allow any-to-any global cross-country retirement (e.g., India/US/AU/EU/NZ -> any of 34 cities).
+		// Allow any-to-any global cross-country retirement (e.g., India/US/AU/EU/NZ -> any of 37 cities).
 		retCity := data.GetCity(in.RetirementCityID, currCity.Country)
 		in.RetirementCityID = retCity.ID
 	}

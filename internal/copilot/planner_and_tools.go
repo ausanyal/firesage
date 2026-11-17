@@ -437,7 +437,7 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 			FormatCompact(evalPlan.MonthlyLockedSavings, evalPlan.Country),
 			evalPlan.AnnualSavingsStepUp*100,
 			FormatCompact(evalPlan.DesiredMonthlySpend, evalPlan.Country),
-			FormatCompact(evalAnalysis.GeoArbitrage.EffectiveRetireMonthly, evalPlan.Country),
+			FormatCompact(ActiveRetireMonthly(evalPlan, evalAnalysis), evalPlan.Country),
 			evalPlan.Allocation.Equity*100, evalPlan.Allocation.UseBondTent, evalPlan.WithdrawalStrategy, evalPlan.UseSpendingSmile, evalPlan.EnableTaxOptimization),
 		fmt.Sprintf("[TOOL:MONTE_CARLO_KPIS] PlanSurvival=%.1f%% | Pre-%d LiquiditySafe=%.1f%% (WarningAge=%d) | ProjectedCorpusAtFIRE: P10=%s, P50=%s, P90=%s (Nominal P50=%s) | 90%%-SafeCorpusNeeded=%s | ImpliedInitialSWR=%.2f%% | Sustainable90%%Spend=%s/mo | TerminalRealP50=%s | MilestoneAges: Coast=%.1f, Lean=%.1f, Target90%%=%.1f, Fortress97%%=%.1f",
 			evalAnalysis.SuccessRate, unlockAge, evalAnalysis.LiquiditySafeRate, evalAnalysis.LiquidityWarningAge,
@@ -465,10 +465,10 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 	var cityRows []cityComparisonRow
 	if intent.IsComparison || len(intent.MentionedCities) >= 2 {
 		tGeo := time.Now()
-		candCities := make([]data.CityProfile, 0, 5)
+		candCities := make([]data.CityProfile, 0, 7)
 		seenID := map[string]bool{}
 		pushCity := func(c data.CityProfile) {
-			if c.ID != "" && !seenID[c.ID] && len(candCities) < 5 {
+			if c.ID != "" && !seenID[c.ID] && len(candCities) < 7 {
 				seenID[c.ID] = true
 				candCities = append(candCities, c)
 			}
@@ -481,7 +481,7 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 
 		// Add smart domestic + cross-border arbitrage benchmarks if fewer than 4 cities selected
 		defaultBenchIDs := map[data.CountryCode][]string{
-			data.CountryIndia:      {"in-kolkata", "in-goa", "in-dehradun", "in-kochi", "eu-algarve"},
+			data.CountryIndia:      {"in-kolkata", "in-goa", "in-dehradun", "in-indore", "in-kochi", "eu-algarve"},
 			data.CountryUSA:        {"us-raleigh", "us-tampa", "eu-algarve", "eu-south-italy"},
 			data.CountryAustralia:  {"au-gold-coast", "au-adelaide", "nz-tauranga-nelson", "eu-algarve"},
 			data.CountryEurope:     {"eu-algarve", "eu-south-italy", "eu-lugano", "eu-crete-greece"},
@@ -508,7 +508,7 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 					City:              cp,
 					SuccessRate:       res.SuccessRate,
 					LiquiditySafeRate: res.LiquiditySafeRate,
-					EffectiveMonthly:  res.GeoArbitrage.EffectiveRetireMonthly,
+					EffectiveMonthly:  ActiveRetireMonthly(pCity, res),
 					RequiredCorpus90:  res.RequiredCorpus90,
 					TargetFIREAge:     res.TargetFIREAge,
 					TerminalP50:       res.TerminalRealP50,
@@ -1153,14 +1153,14 @@ func synthesizeDeterministicMarkdown(
 		b.WriteString(fmt.Sprintf("| **Median Corpus @ Age %d** | **%s** (`P10`: %s) | 90%%-Safe Target: **%s** |\n",
 			evalPlan.RetirementAge, FormatCompact(evalRes.CorpusAtFireRealP50, cc), FormatCompact(evalRes.CorpusAtFireRealP10, cc), FormatCompact(evalRes.RequiredCorpus90, cc)))
 		b.WriteString(fmt.Sprintf("| **Effective Retire Budget** | **%s/mo** (SWR `%.2f%%`) | 90%%-Safe Max Spend: **%s/mo** |\n",
-			FormatCompact(evalRes.GeoArbitrage.EffectiveRetireMonthly, cc), evalRes.ImpliedInitialSWR, FormatCompact(evalRes.SafeMonthlySpend90, cc)))
+			FormatCompact(ActiveRetireMonthly(evalPlan, evalRes), cc), evalRes.ImpliedInitialSWR, FormatCompact(evalRes.SafeMonthlySpend90, cc)))
 		b.WriteString(fmt.Sprintf("| **Milestone FIRE Ages** | **Target: Age %.1f** | Coast: `%.1f` · Fortress: `%.1f` |\n\n",
 			evalRes.TargetFIREAge, evalRes.CoastFIREAge, evalRes.FortressFIREAge))
 	}
 
 	// Why 35x vs Dynamic Multiplier section when asked
 	if intent.IsMethodologyOr35x {
-		annSpend := math.Max(1, evalRes.GeoArbitrage.EffectiveRetireMonthly*12)
+		annSpend := math.Max(1, ActiveRetireMonthly(evalPlan, evalRes)*12)
 		dynMult := evalRes.RequiredCorpus90 / annSpend
 		b.WriteString("#### 📐 Why FireSage Computes a Dynamic Multiplier Instead of Static `35x`\n\n")
 		b.WriteString(fmt.Sprintf("- Your **90%%-Safe Corpus (`%s`)** divided by your effective annual retirement spend (`%s/yr`) equals **`%.1fx`** (Implied Year-1 SWR: **`%.2f%%`**).\n",

@@ -197,7 +197,7 @@ func ExecuteConversationalTurn(req ChatRequest, kind QueryKind, subtopic string)
 			FormatCompact(userBase.MonthlySavings, cc),
 			FormatCompact(userBase.MonthlyLockedSavings, cc),
 			FormatCompact(userBase.DesiredMonthlySpend, cc),
-			FormatCompact(snap.GeoArbitrage.EffectiveRetireMonthly, cc),
+			FormatCompact(ActiveRetireMonthly(userBase, snap), cc),
 			snap.SuccessRate, unlockAge, snap.LiquiditySafeRate,
 			FormatCompact(snap.CorpusAtFireRealP50, cc),
 			FormatCompact(snap.RequiredCorpus90, cc),
@@ -272,7 +272,8 @@ func ExecuteConversationalTurn(req ChatRequest, kind QueryKind, subtopic string)
 
 func buildFollowUpConversationalReply(q, lastBot string, plan engine.PlanInput, snap engine.FullAnalysisResponse, curCity, retCity data.CityProfile) string {
 	cc := plan.Country
-	annSpend := snap.GeoArbitrage.EffectiveRetireMonthly * 12
+	effMonthly := ActiveRetireMonthly(plan, snap)
+	annSpend := effMonthly * 12
 	mult := snap.RequiredCorpus90 / math.Max(1, annSpend)
 	qLow := strings.ToLower(q)
 
@@ -280,7 +281,7 @@ func buildFollowUpConversationalReply(q, lastBot string, plan engine.PlanInput, 
 		return strings.Join([]string{
 			"Sure — here's a concrete, real-world example using your own numbers:",
 			"",
-			fmt.Sprintf("Imagine two people both retiring at **Age %d** in **%s** spending **%s/mo** (`%s/yr`):", plan.RetirementAge, retCity.Name, FormatCompact(snap.GeoArbitrage.EffectiveRetireMonthly, cc), FormatCompact(annSpend, cc)),
+			fmt.Sprintf("Imagine two people both retiring at **Age %d** in **%s** spending **%s/mo** (`%s/yr`):", plan.RetirementAge, retCity.Name, FormatCompact(effMonthly, cc), FormatCompact(annSpend, cc)),
 			"1. **Lucky Timing (Bull Start):** Markets rise `+15%/yr` in their first 4 years of retirement. Even after paying bills and taxes, their portfolio snowballs faster than they spend it.",
 			fmt.Sprintf("2. **Unlucky Timing (1973 / 2000 / 2008 Start):** Markets drop `-30%%` right after they quit their job while inflation jumps. Because they still have to withdraw **%s/yr** to live on, they're forced to sell shares at depressed prices — permanently shrinking the engine before the recovery arrives.", FormatCompact(annSpend, cc)),
 			"",
@@ -325,7 +326,8 @@ func buildConceptConversationalReply(
 ) (string, []CopilotAction) {
 	cc := plan.Country
 	unlockAge := CountryUnlockAge(cc)
-	annSpend := math.Max(1, snap.GeoArbitrage.EffectiveRetireMonthly*12)
+	effMonthly := ActiveRetireMonthly(plan, snap)
+	annSpend := math.Max(1, effMonthly*12)
 	dynMult := snap.RequiredCorpus90 / annSpend
 
 	switch topic {
@@ -340,7 +342,7 @@ func buildConceptConversationalReply(
 				"4. **Sequence-of-Returns Defense:** Making sure a market crash or inflation wave in your first 5 years of retirement doesn't permanently deplete your nest egg.",
 				"",
 				fmt.Sprintf("*On your live dashboard right now (%s → %s):* your target budget is **%s/mo**, which requires **%s** (`%.1fx` annual spend) for a **90%%-safe FIRE** — putting your 90%% target age at **Age %.1f**.",
-					curCity.Name, retCity.Name, FormatCompact(snap.GeoArbitrage.EffectiveRetireMonthly, cc), FormatCompact(snap.RequiredCorpus90, cc), dynMult, snap.TargetFIREAge),
+					curCity.Name, retCity.Name, FormatCompact(effMonthly, cc), FormatCompact(snap.RequiredCorpus90, cc), dynMult, snap.TargetFIREAge),
 			}, "\n"), []CopilotAction{
 				{Label: "💬 Compare Lean, Coast, Barista & Fat FIRE", Prompt: "What is the difference between Coast FIRE, Lean FIRE, Barista FIRE, and Fat FIRE?"},
 				{Label: "💬 Why does 25x / 35x break down?", Prompt: "Why does the 4% rule or 35x multiplier break down for early retirees?"},
@@ -476,7 +478,7 @@ func buildConceptConversationalReply(
 				"- Cutting equivalent monthly housing + living costs by `25%–45%` lowers **both** your annual withdrawals AND your 90%-safe required nest egg — often shaving **4 to 8 years** off your working career without sacrificing lifestyle quality.",
 				"- In **Cross-Border Geo-Arbitrage**, destination tax regimes matter enormously: e.g., **Southern Italy (`7%` flat retiree tax for 10 yrs)**, **Greece (`7%` for 15 yrs)**, **New Zealand (`4-yr` Transitional Resident `0%` FIF holiday)**, or **India's `RNOR` window** for returning NRIs.",
 				"",
-				"*FireSage models both domestic and any-to-any cross-border moves across all **34 cities** automatically!*",
+				fmt.Sprintf("*FireSage models both domestic and any-to-any cross-border moves across all **%d cities** automatically!*", len(data.Cities())),
 			}, "\n"), []CopilotAction{
 				{Label: fmt.Sprintf("🌍 Compare %s vs Top Domestic & Global Cities", curCity.Name), Prompt: fmt.Sprintf("Compare retiring in %s vs top domestic and global geo-arbitrage cities", curCity.Name)},
 				{Label: "💬 What about healthcare in Tier-2 cities?", Prompt: "How does healthcare inflation work in Tier-2 or hill-station retirement cities?"},
