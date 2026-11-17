@@ -288,17 +288,22 @@ type ParsedIntent struct {
 	SwitchCountry *data.CountryCode
 	MentionedCities []data.CityProfile
 
-	NewCurrentAge     *int
-	NewRetirementAge  *int
-	NewHorizonAge     *int
-	NewMonthlySpend   *float64
-	NewCurrentCorpus  *float64
-	NewMonthlySavings *float64
-	NewEquityPct      *float64
-	NewStrategy       *engine.WithdrawalStrategy
-	EnableBondTent    *bool
-	EnableSmile       *bool
-	EnableTaxOpt      *bool
+	NewCurrentAge      *int
+	NewRetirementAge   *int
+	RetireAgeDelta     *int
+	NewHorizonAge      *int
+	NewMonthlySpend    *float64
+	SpendScaleFactor   *float64
+	NewCurrentCorpus   *float64
+	NewMonthlySavings  *float64
+	SavingsScaleFactor *float64
+	NewStepUpPct       *float64
+	NewEquityPct       *float64
+	NewStrategy        *engine.WithdrawalStrategy
+	NewSimMode         *engine.SimulationMode
+	EnableBondTent     *bool
+	EnableSmile        *bool
+	EnableTaxOpt       *bool
 
 	TargetConfidence float64
 	CrashPct         *float64
@@ -334,8 +339,14 @@ var (
 	reMoneySave   = regexp.MustCompile(`(?i)\b(?:sip|monthly\s+savings?|save|saving|invest|contribute)\s*(?:of|to|at|=|is)?\s*(?:rs\.?|inr|₹|\$|a\$|au\$|nz\$|€|eur|usd|aud|nzd)?\s*(\d[\d,]*(?:\.\d+)?)\s*(cr|crore|crores|l|lakh|lakhs|lac|lacs|m|mn|million|k|thousand)?\b`)
 	reGenericAmt  = regexp.MustCompile(`(?i)(?:rs\.?|inr|₹|\$|a\$|au\$|nz\$|€)\s*(\d[\d,]*(?:\.\d+)?)\s*(cr|crore|crores|l|lakh|lakhs|lac|lacs|m|mn|million|k|thousand)?`)
 
-	reEquityAlloc = regexp.MustCompile(`(?i)\b(\d{2,3})\s*%\s*(?:in\s+)?(?:equity|equities|stocks)\b`)
-	reConfidence  = regexp.MustCompile(`(?i)\b(80|85|90|92|95|97|98|99)\s*%\s*(?:confidence|survival|safe|success|odds|probability)\b`)
+	reEquityAlloc   = regexp.MustCompile(`(?i)\b(\d{2,3})\s*%\s*(?:in\s+)?(?:equity|equities|stocks)\b`)
+	reStepUpAlloc   = regexp.MustCompile(`(?i)(?:(\d{1,2}(?:\.\d+)?)\s*%\s*(?:annual\s+|yearly\s+)?step[\s-]*up|step[\s-]*up(?:\s+sip|\s+savings?)?\s*(?:by|to|of|=)?\s*(\d{1,2}(?:\.\d+)?)\s*%)`)
+	reRetireEarlier = regexp.MustCompile(`(?i)\bretire\s+(\d{1,2})\s*(?:years?|yrs?)\s*(?:earlier|sooner)\b`)
+	reRetireLater   = regexp.MustCompile(`(?i)\b(?:delay\s+retirement\s+by|retire\s+|work\s+)(\d{1,2})\s*(?:more\s+)?(?:years?|yrs?)(?:\s+later)?\b`)
+	reSpendCutPct   = regexp.MustCompile(`(?i)\b(?:cut|reduce|trim|lower)\s+(?:my\s+)?(?:monthly\s+)?(?:spend|spending|budget|expenses?)\s*(?:by)?\s*(\d{1,2}(?:\.\d+)?)\s*%`)
+	reSpendBoostPct = regexp.MustCompile(`(?i)\b(?:increase|raise|boost)\s+(?:my\s+)?(?:monthly\s+)?(?:spend|spending|budget|expenses?)\s*(?:by)?\s*(\d{1,2}(?:\.\d+)?)\s*%`)
+	reSaveBoostPct  = regexp.MustCompile(`(?i)\b(?:increase|raise|boost|step\s+up)\s+(?:my\s+)?(?:monthly\s+)?(?:sip|savings?)\s+by\s+(\d{1,3}(?:\.\d+)?)\s*%`)
+	reConfidence    = regexp.MustCompile(`(?i)\b(80|85|90|92|95|97|98|99)\s*%\s*(?:confidence|survival|safe|success|odds|probability)\b`)
 	reCrashPct    = regexp.MustCompile(`(?i)(-?\d{1,2}(?:\.\d+)?)\s*%\s*(?:market\s+|equity\s+|year[\s-]*1\s+)?(?:crash|drop|plunge|selloff|drawdown|shock)`)
 	reCrashAlt    = regexp.MustCompile(`(?i)(?:crash|drop|drops|plunge|falls)\s*(?:by|of)?\s*(-?\d{1,2}(?:\.\d+)?)\s*%`)
 	reExtraInf    = regexp.MustCompile(`(?i)\+?(\d{1,2}(?:\.\d+)?)\s*%\s*(?:extra\s+|higher\s+|spike\s+in\s+)?inflation`)
@@ -401,6 +412,15 @@ func ParseUserQuestion(question string, base engine.PlanInput) ParsedIntent {
 		if age, err := strconv.Atoi(m[1]); err == nil && age >= 22 && age <= 85 {
 			intent.NewRetirementAge = &age
 		}
+	} else if m := reRetireEarlier.FindStringSubmatch(question); len(m) >= 2 {
+		if yrs, err := strconv.Atoi(m[1]); err == nil && yrs >= 1 && yrs <= 25 {
+			delta := -yrs
+			intent.RetireAgeDelta = &delta
+		}
+	} else if m := reRetireLater.FindStringSubmatch(question); len(m) >= 2 {
+		if yrs, err := strconv.Atoi(m[1]); err == nil && yrs >= 1 && yrs <= 25 {
+			intent.RetireAgeDelta = &yrs
+		}
 	}
 	if m := reHorizonAge.FindStringSubmatch(question); len(m) >= 2 {
 		if age, err := strconv.Atoi(m[1]); err == nil && age >= 65 && age <= 105 {
@@ -412,15 +432,41 @@ func ParseUserQuestion(question string, base engine.PlanInput) ParsedIntent {
 		if val, ok := ParseMoneyToken(m[1], m[2]); ok && val >= 400 {
 			intent.NewMonthlySpend = &val
 		}
+	} else if m := reSpendCutPct.FindStringSubmatch(question); len(m) >= 2 {
+		if pct, err := strconv.ParseFloat(m[1], 64); err == nil && pct > 0 && pct <= 60 {
+			fac := 1.0 - pct/100.0
+			intent.SpendScaleFactor = &fac
+		}
+	} else if m := reSpendBoostPct.FindStringSubmatch(question); len(m) >= 2 {
+		if pct, err := strconv.ParseFloat(m[1], 64); err == nil && pct > 0 && pct <= 150 {
+			fac := 1.0 + pct/100.0
+			intent.SpendScaleFactor = &fac
+		}
 	}
 	if m := reMoneyCorpus.FindStringSubmatch(question); len(m) >= 2 {
 		if val, ok := ParseMoneyToken(m[1], m[2]); ok && val >= 5_000 {
 			intent.NewCurrentCorpus = &val
 		}
 	}
-	if m := reMoneySave.FindStringSubmatch(question); len(m) >= 2 && !intent.IsLifeEvent {
+	if m := reSaveBoostPct.FindStringSubmatch(question); len(m) >= 2 {
+		if pct, err := strconv.ParseFloat(m[1], 64); err == nil && pct > 0 && pct <= 300 {
+			fac := 1.0 + pct/100.0
+			intent.SavingsScaleFactor = &fac
+		}
+	} else if m := reMoneySave.FindStringSubmatch(question); len(m) >= 2 && !intent.IsLifeEvent {
 		if val, ok := ParseMoneyToken(m[1], m[2]); ok && val >= 100 {
 			intent.NewMonthlySavings = &val
+		}
+	}
+
+	if m := reStepUpAlloc.FindStringSubmatch(question); len(m) >= 3 {
+		rawPct := m[1]
+		if rawPct == "" {
+			rawPct = m[2]
+		}
+		if pct, err := strconv.ParseFloat(rawPct, 64); err == nil && pct >= 0 && pct <= 30 {
+			frac := pct / 100.0
+			intent.NewStepUpPct = &frac
 		}
 	}
 
@@ -429,6 +475,17 @@ func ParseUserQuestion(question string, base engine.PlanInput) ParsedIntent {
 			frac := pct / 100.0
 			intent.NewEquityPct = &frac
 		}
+	}
+
+	if strings.Contains(qLow, "switch to historical") || strings.Contains(qLow, "historical rolling") {
+		md := engine.ModeHistorical
+		intent.NewSimMode = &md
+	} else if strings.Contains(qLow, "regime mc") || strings.Contains(qLow, "markov regime") {
+		md := engine.ModeRegimeMC
+		intent.NewSimMode = &md
+	} else if strings.Contains(qLow, "switch to bootstrap") || strings.Contains(qLow, "stationary block bootstrap") {
+		md := engine.ModeBootstrap
+		intent.NewSimMode = &md
 	}
 
 	// Withdrawal strategy & toggles

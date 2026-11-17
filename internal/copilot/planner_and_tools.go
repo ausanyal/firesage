@@ -189,6 +189,13 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 		}
 		hasParamOverride = true
 		mutationNotes = append(mutationNotes, fmt.Sprintf("Retirement Age → %d", activeInput.RetirementAge))
+	} else if intent.RetireAgeDelta != nil && *intent.RetireAgeDelta != 0 {
+		nextRet := maxInt(activeInput.CurrentAge+1, minInt(activeInput.HorizonAge-5, activeInput.RetirementAge+*intent.RetireAgeDelta))
+		if nextRet != activeInput.RetirementAge {
+			activeInput.RetirementAge = nextRet
+			hasParamOverride = true
+			mutationNotes = append(mutationNotes, fmt.Sprintf("Retirement Age → %d (%+d yrs)", activeInput.RetirementAge, *intent.RetireAgeDelta))
+		}
 	}
 	if intent.NewHorizonAge != nil && *intent.NewHorizonAge != activeInput.HorizonAge {
 		activeInput.HorizonAge = *intent.NewHorizonAge
@@ -199,6 +206,11 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 		activeInput.DesiredMonthlySpend = *intent.NewMonthlySpend
 		hasParamOverride = true
 		mutationNotes = append(mutationNotes, fmt.Sprintf("Monthly Spend → %s/mo", FormatCompact(*intent.NewMonthlySpend, activeInput.Country)))
+	} else if intent.SpendScaleFactor != nil && *intent.SpendScaleFactor > 0 {
+		scaled := math.Round(activeInput.DesiredMonthlySpend * (*intent.SpendScaleFactor))
+		activeInput.DesiredMonthlySpend = scaled
+		hasParamOverride = true
+		mutationNotes = append(mutationNotes, fmt.Sprintf("Monthly Spend → %s/mo (%+.0f%%)", FormatCompact(scaled, activeInput.Country), (*intent.SpendScaleFactor-1)*100))
 	}
 	if intent.NewCurrentCorpus != nil {
 		RebalanceGranularBuckets(&activeInput, *intent.NewCurrentCorpus)
@@ -209,6 +221,21 @@ func ExecutePipeline(req ChatRequest) ChatResponse {
 		activeInput.MonthlySavings = *intent.NewMonthlySavings
 		hasParamOverride = true
 		mutationNotes = append(mutationNotes, fmt.Sprintf("Monthly Liquid SIP → %s/mo", FormatCompact(*intent.NewMonthlySavings, activeInput.Country)))
+	} else if intent.SavingsScaleFactor != nil && *intent.SavingsScaleFactor > 0 {
+		scaled := math.Round(activeInput.MonthlySavings * (*intent.SavingsScaleFactor))
+		activeInput.MonthlySavings = scaled
+		hasParamOverride = true
+		mutationNotes = append(mutationNotes, fmt.Sprintf("Monthly Liquid SIP → %s/mo (%+.0f%%)", FormatCompact(scaled, activeInput.Country), (*intent.SavingsScaleFactor-1)*100))
+	}
+	if intent.NewStepUpPct != nil {
+		activeInput.AnnualSavingsStepUp = *intent.NewStepUpPct
+		hasParamOverride = true
+		mutationNotes = append(mutationNotes, fmt.Sprintf("Annual SIP Step-Up → %.1f%%/yr", *intent.NewStepUpPct*100))
+	}
+	if intent.NewSimMode != nil && *intent.NewSimMode != activeInput.Mode {
+		activeInput.Mode = *intent.NewSimMode
+		hasParamOverride = true
+		mutationNotes = append(mutationNotes, fmt.Sprintf("Simulation Mode → %s", *intent.NewSimMode))
 	}
 	if intent.NewEquityPct != nil {
 		eq := *intent.NewEquityPct

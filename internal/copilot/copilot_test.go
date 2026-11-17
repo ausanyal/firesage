@@ -155,4 +155,27 @@ func TestExecutePipelinePlannerToolsAndPersonas(t *testing.T) {
 	if !strings.Contains(followResp.Markdown, "example") {
 		t.Fatalf("expected contextual follow-up example, got:\n%s", followResp.Markdown)
 	}
+
+	// 6. Multi-clause compound natural-language simulation ("cut spending by 15%, boost SIP by 25%, 10% step-up, retire 3 years earlier in Kochi")
+	compoundResp := ExecutePipeline(ChatRequest{
+		Question:   "What if I cut spending by 15%, boost my SIP by 25% with a 10% annual step-up, and retire 3 years earlier in Kochi?",
+		Mode:       "analyst",
+		Input:      base,
+		ValueBasis: "real",
+	})
+	if !compoundResp.OK {
+		t.Fatalf("expected compoundResp.OK=true")
+	}
+	foundMutate := false
+	for _, tc := range compoundResp.ToolTrace {
+		if tc.Tool == "update_live_plan_parameters" {
+			foundMutate = true
+			if !strings.Contains(tc.ArgsSummary, "-15%") || !strings.Contains(tc.ArgsSummary, "+25%") || !strings.Contains(tc.ArgsSummary, "10.0%/yr") || !strings.Contains(tc.ArgsSummary, "Kochi") {
+				t.Fatalf("expected all 5 multi-clause mutations in ArgsSummary, got: %s", tc.ArgsSummary)
+			}
+		}
+	}
+	if !foundMutate {
+		t.Fatalf("expected update_live_plan_parameters tool trace on multi-clause prompt")
+	}
 }

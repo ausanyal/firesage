@@ -1,5 +1,36 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>FireSage</title></head>
-<body><div id="root">FireSage API Active</div></body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>FireSage — Global Stochastic FIRE &amp; Geo-Arbitrage Simulator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      {
+        const savedScheme = localStorage.getItem('color-scheme');
+        if (savedScheme === 'light' || savedScheme === 'dark') {
+          const meta = document.querySelector('meta[name="color-scheme"]');
+          if (meta) meta.setAttribute('content', savedScheme);
+          document.documentElement.dataset.theme = savedScheme;
+        }
+        const savedSeed = localStorage.getItem('firesage_m3_seed');
+        if (savedSeed === 'emerald' || savedSeed === 'amber' || savedSeed === 'sapphire' || savedSeed === 'violet') {
+          document.documentElement.dataset.seed = savedSeed;
+        } else {
+          document.documentElement.dataset.seed = 'emerald';
+        }
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/index-KFhUh55S.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-BVxPMYGc.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
 </html>

@@ -23,6 +23,18 @@ import {
 } from './types';
 import { COUNTRY_META, formatMoneyCompact, formatMoneyFull } from './utils/format';
 
+type TonalSeedId = 'emerald' | 'amber' | 'sapphire' | 'violet';
+
+const TONAL_SEED_OPTIONS: ReadonlyArray<{ id: TonalSeedId; label: string; hex: string }> = [
+  { id: 'emerald', label: 'Emerald Growth', hex: '#10b981' },
+  { id: 'amber', label: 'Flame Amber', hex: '#f59e0b' },
+  { id: 'sapphire', label: 'Ocean Sapphire', hex: '#38bdf8' },
+  { id: 'violet', label: 'Royal Violet', hex: '#a78bfa' },
+];
+
+const WEALTH_STAGE_VIDEO_URL =
+  'https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260405_170732_8a9ccda6-5cff-4628-b164-059c500a2b41.mp4';
+
 export const App: React.FC = () => {
   const [metadata, setMetadata] = useState<MetadataResponse | null>(null);
   const [input, setInput] = useState<PlanInput | null>(null);
@@ -30,6 +42,21 @@ export const App: React.FC = () => {
   const [backend, setBackend] = useState<ExecutionBackend>('go-local-wasm');
   const [isComputing, setIsComputing] = useState(false);
   const [valueBasis, setValueBasis] = useState<'real' | 'nominal'>('real');
+
+  // Material You (M3 HCT) Dynamic Tonal Seed
+  const [tonalSeed, setTonalSeed] = useState<TonalSeedId>(() => {
+    const saved = localStorage.getItem('firesage_m3_seed');
+    if (saved === 'emerald' || saved === 'amber' || saved === 'sapphire' || saved === 'violet') {
+      return saved;
+    }
+    return 'emerald';
+  });
+
+  // Ambient stage motion pause state (honors prefers-reduced-motion: reduce by default)
+  const [motionPaused, setMotionPaused] = useState<boolean>(() =>
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  );
+  const stageVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Two-state color-scheme toggle respecting OS preference per modern-web-guidance `dark-mode`
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -68,6 +95,28 @@ export const App: React.FC = () => {
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
   }, []);
+
+  const selectTonalSeed = (seed: TonalSeedId) => {
+    setTonalSeed(seed);
+    document.documentElement.dataset.seed = seed;
+    localStorage.setItem('firesage_m3_seed', seed);
+  };
+
+  useEffect(() => {
+    document.documentElement.dataset.seed = tonalSeed;
+  }, [tonalSeed]);
+
+  useEffect(() => {
+    const el = stageVideoRef.current;
+    if (!el) return;
+    if (motionPaused) {
+      el.pause();
+    } else {
+      void el.play().catch(() => {
+        /* Autoplay blocked gracefully */
+      });
+    }
+  }, [motionPaused, analysis !== null]);
 
   const toggleTheme = () => {
     const nextScheme = isDark ? 'light' : 'dark';
@@ -411,6 +460,28 @@ export const App: React.FC = () => {
             💬 FIRE Chat
           </button>
 
+          <fieldset className="m3-seed-group">
+            <legend className="visually-hidden">Material You dynamic tonal color seed</legend>
+            {TONAL_SEED_OPTIONS.map((opt) => (
+              <label key={opt.id} className="m3-seed-swatch">
+                <input
+                  type="radio"
+                  name="firesage_m3_seed"
+                  value={opt.id}
+                  checked={tonalSeed === opt.id}
+                  onChange={() => selectTonalSeed(opt.id)}
+                  className="visually-hidden"
+                />
+                <span className="visually-hidden">{opt.label}</span>
+                <span
+                  className="m3-seed-dot"
+                  style={{ '--swatch-color': opt.hex } as React.CSSProperties}
+                  aria-hidden="true"
+                />
+              </label>
+            ))}
+          </fieldset>
+
           <button
             type="button"
             className="fs-btn"
@@ -432,6 +503,75 @@ export const App: React.FC = () => {
         />
 
         <div className="fs-main-canvas">
+          {/* INSET CINEMATIC WEALTH HORIZON STAGE */}
+          <div className="ms-fire-stage">
+            <video
+              ref={stageVideoRef}
+              className="ms-fire-video"
+              src={WEALTH_STAGE_VIDEO_URL}
+              autoPlay={!motionPaused}
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              aria-hidden="true"
+            />
+            <div className="ms-fire-scrim" aria-hidden="true" />
+            <div className="ms-fire-grain" aria-hidden="true" />
+
+            <div className="ms-fire-top">
+              <span className="ms-fire-pill liquid-glass">
+                {COUNTRY_META[country].flag} {analysis.geo_arbitrage.current_city.name} &rarr;{' '}
+                {analysis.geo_arbitrage.comparison_city.name} &bull; {input.num_paths.toLocaleString()} CRN Paths &bull;{' '}
+                {backend === 'go-cloud-api' ? 'Go Concurrent Engine' : 'Go WASM Engine'}
+              </span>
+
+              <button
+                type="button"
+                className="ms-fire-motion-btn liquid-glass"
+                aria-pressed={!motionPaused}
+                aria-label="Ambient stage motion"
+                onClick={() => setMotionPaused((p) => !p)}
+              >
+                <span aria-hidden="true">{motionPaused ? '▶ Play Stage' : '⏸ Pause Stage'}</span>
+              </button>
+            </div>
+
+            <div className="ms-fire-body">
+              <div className="ms-fire-copy">
+                <h2 className="ms-fire-headline">
+                  Financial independence by{' '}
+                  <span className="ms-fire-serif">Age {analysis.target_fire_age.toFixed(1)}</span> &mdash;{' '}
+                  {analysis.success_rate.toFixed(1)}% survival to Age {input.horizon_age} with{' '}
+                  <span className="ms-fire-serif">
+                    {formatMoneyCompact(
+                      valueBasis === 'real' ? analysis.corpus_at_fire_real_p50 : analysis.corpus_at_fire_nom_p50,
+                      country,
+                    )}
+                  </span>{' '}
+                  projected at retirement.
+                </h2>
+                <p className="ms-fire-subline">
+                  Politis &amp; Romano stationary block bootstrap preserving multi-year stagflation waves, statutory Age-
+                  {unlockAge} pension lock-ins, and 34-city global geo-arbitrage parity.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                className="ms-fire-cta"
+                onClick={() =>
+                  launchCopilotWithPrompt(
+                    `Audit my ${analysis.geo_arbitrage.current_city.name} to ${analysis.geo_arbitrage.comparison_city.name} retirement plan, pre-Age-${unlockAge} liquidity bridge, and rank my highest-impact action levers.`,
+                    'analyst',
+                  )
+                }
+              >
+                🧠 Run 3-Stage Copilot Audit &rarr;
+              </button>
+            </div>
+          </div>
+
           {/* EXECUTIVE TELEMETRY KPI STRIP */}
           <div id="fs-kpi-strip" className="fs-kpi-grid">
             <div className="fs-kpi-card">

@@ -238,25 +238,13 @@ func tryGeminiSynthesis(req copilot.ChatRequest, base copilot.ChatResponse) (rep
 		req.Question,
 	)
 
-	payload := map[string]any{
-		"contents": []map[string]any{
-			{
-				"role":  "user",
-				"parts": []map[string]string{{"text": combinedPrompt}},
-			},
-		},
-		"generationConfig": map[string]any{
-			"temperature":     0.35,
-			"maxOutputTokens": 2048,
-		},
-	}
-	bodyBytes, _ := json.Marshal(payload)
 	httpClient := &http.Client{Timeout: 28 * time.Second}
 
 	// Route A: Explicit or Server-Env Gemini Developer API Key
 	if apiKey != "" {
 		var lastErr error
 		for _, m := range models {
+			bodyBytes := buildGeminiRequestBody(m, combinedPrompt, hasTools)
 			endpoint := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", m, apiKey)
 			text, status, errBody, callErr := invokeGeminiEndpoint(httpClient, endpoint, "", bodyBytes)
 			if callErr == nil && text != "" {
@@ -286,6 +274,7 @@ func tryGeminiSynthesis(req copilot.ChatRequest, base copilot.ChatResponse) (rep
 				host = "aiplatform.googleapis.com"
 			}
 			for _, m := range models {
+				bodyBytes := buildGeminiRequestBody(m, combinedPrompt, hasTools)
 				endpoint := fmt.Sprintf("https://%s/v1/projects/%s/locations/%s/publishers/google/models/%s:generateContent", host, projID, loc, m)
 				text, status, errBody, callErr := invokeGeminiEndpoint(httpClient, endpoint, accessToken, bodyBytes)
 				if callErr == nil && text != "" {
@@ -303,6 +292,35 @@ func tryGeminiSynthesis(req copilot.ChatRequest, base copilot.ChatResponse) (rep
 	}
 
 	return "", "", "", err
+}
+
+func buildGeminiRequestBody(modelName, combinedPrompt string, hasTools bool) []byte {
+	genCfg := map[string]any{
+		"temperature":     0.35,
+		"maxOutputTokens": 2560,
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(modelName)), "gemini-2.5") {
+		budget := 384
+		if strings.Contains(strings.ToLower(modelName), "pro") {
+			budget = 1024
+		} else if hasTools {
+			budget = 768
+		}
+		genCfg["thinkingConfig"] = map[string]any{
+			"thinkingBudget": budget,
+		}
+	}
+	payload := map[string]any{
+		"contents": []map[string]any{
+			{
+				"role":  "user",
+				"parts": []map[string]string{{"text": combinedPrompt}},
+			},
+		},
+		"generationConfig": genCfg,
+	}
+	b, _ := json.Marshal(payload)
+	return b
 }
 
 func invokeGeminiEndpoint(client *http.Client, url, bearerToken string, bodyBytes []byte) (text string, statusCode int, errSnippet string, err error) {

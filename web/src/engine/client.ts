@@ -147,12 +147,18 @@ export async function runCopilotChat(
         '',
         `[USER MESSAGE]: ${req.question}`,
       ].join('\n');
+      const genCfg: Record<string, unknown> = { temperature: 0.35, maxOutputTokens: 2560 };
+      if (model.toLowerCase().startsWith('gemini-2.5')) {
+        genCfg.thinkingConfig = {
+          thinkingBudget: model.toLowerCase().includes('pro') ? 1024 : hasTools ? 768 : 384,
+        };
+      }
       const llmResp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.35, maxOutputTokens: 2048 },
+          generationConfig: genCfg,
         }),
       });
       if (llmResp.ok) {

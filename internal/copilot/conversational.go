@@ -42,11 +42,16 @@ func ClassifyQueryKind(question string, intent ParsedIntent, history []ChatTurn)
 		len(intent.MentionedCities) >= 2 ||
 		intent.NewCurrentAge != nil ||
 		intent.NewRetirementAge != nil ||
+		intent.RetireAgeDelta != nil ||
 		intent.NewHorizonAge != nil ||
 		intent.NewMonthlySpend != nil ||
+		intent.SpendScaleFactor != nil ||
 		intent.NewCurrentCorpus != nil ||
 		intent.NewMonthlySavings != nil ||
+		intent.SavingsScaleFactor != nil ||
+		intent.NewStepUpPct != nil ||
 		intent.NewEquityPct != nil ||
+		intent.NewSimMode != nil ||
 		intent.CrashPct != nil ||
 		intent.ExtraInfPct != nil ||
 		intent.MedicalShock != nil ||
